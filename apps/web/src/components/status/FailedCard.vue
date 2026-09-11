@@ -59,9 +59,6 @@ onBeforeUnmount(() => {
       >
         {{ cooldown > 0 ? `重试（${cooldown}s）` : '重试' }}
       </button>
-      <p v-else-if="props.error?.code === 'quota_exhausted'" class="failed__quota">
-        今日额度已用尽，明天再来
-      </p>
       <button type="button" class="failed__back" @click="emit('back')">返回首页</button>
     </div>
   </section>
@@ -76,8 +73,7 @@ onBeforeUnmount(() => {
   color: var(--ink);
 }
 
-.failed__hint,
-.failed__quota {
+.failed__hint {
   margin-top: 6px;
   font-family: var(--font-sans);
   font-size: 12px;
