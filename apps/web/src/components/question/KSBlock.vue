@@ -22,7 +22,12 @@ const hasBody = computed(() => (props.summary ?? '').trim().length > 0)
     <header class="ks__head">
       <span class="ks__mark" aria-hidden="true"><span class="ks__mark-core" /></span>
       <h3 class="ks__title">看山解读</h3>
-      <span class="ks__badge" :class="isFallback ? 'ks__badge--fallback' : 'ks__badge--zhida'">
+      <!-- 没有内容就没有来源：缺综述时不渲染徽标，避免暗示有解读 -->
+      <span
+        v-if="hasBody"
+        class="ks__badge"
+        :class="isFallback ? 'ks__badge--fallback' : 'ks__badge--zhida'"
+      >
         {{ badgeText }}
       </span>
     </header>
@@ -30,7 +35,7 @@ const hasBody = computed(() => (props.summary ?? '').trim().length > 0)
     <p v-if="isFallback && hasBody" class="ks__notice">本条由外部模型生成</p>
 
     <p v-if="hasBody" class="ks__body">{{ summary }}</p>
-    <p v-else class="ks__body ks__body--empty">本条暂无可展示的综述。</p>
+    <p v-else class="ks__missing">本条暂无解读 · 生成未成功，可稍后重试</p>
   </section>
 </template>
 
@@ -107,7 +112,12 @@ const hasBody = computed(() => (props.summary ?? '').trim().length > 0)
   transition: opacity .2s ease;
 }
 
-.ks__body--empty {
-  color: var(--faint);
+/* 缺综述的诚实降级：比正文弱一档（--muted + 小一号字），不冒充有内容 */
+.ks__missing {
+  margin-top: 8px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
 }
 </style>
