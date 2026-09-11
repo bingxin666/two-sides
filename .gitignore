@@ -1,0 +1,90 @@
+# ============================================================
+# 两面（Two Sides）—— 仓库忽略规则
+# 重要：任何包含真实凭据的文件都必须在此忽略，绝不允许入库。
+# ============================================================
+
+# ---------- 环境变量与凭据 ----------
+.env
+.env.*
+*.env
+!.env.example
+
+# 密钥/证书等可能携带凭据的文件
+*.pem
+*.key
+*.p12
+*.pfx
+*.keystore
+secrets.json
+secrets.*
+!secrets.example.json
+
+# ---------- 依赖 ----------
+node_modules/
+.pnp
+.pnp.js
+.yarn/
+.pnp.cjs
+
+# ---------- 构建产物 ----------
+dist/
+dist-ssr/
+build/
+out/
+.vite/
+.turbo/
+.cache/
+.parcel-cache/
+*.tsbuildinfo
+
+# ---------- 测试与覆盖率 ----------
+coverage/
+.nyc_output/
+*.lcov
+
+# ---------- 数据库与运行时数据 ----------
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+*.sqlite
+*.sqlite3
+apps/server/data/
+data/
+*.sqlite-journal
+
+# ---------- 日志 ----------
+*.log
+logs/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---------- 本地环境 ----------
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+Thumbs.db
+ehthumbs.db
+desktop.ini
+
+# ---------- 编辑器 ----------
+.idea/
+*.iml
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+*.swp
+*.swo
+*.swn
+*~
+
+# ---------- 临时/上传 ----------
+tmp/
+temp/
+*.tmp
+*.bak
+*.orig
