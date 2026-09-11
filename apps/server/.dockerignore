@@ -1,0 +1,10 @@
+# 构建上下文只保留运行产物需要的部分（镜像里不进源码/依赖/数据）
+node_modules
+data
+src
+*.log
+.diag.txt
+.dist-run.log
+tsconfig.json
+package.json
+pnpm-lock.yaml

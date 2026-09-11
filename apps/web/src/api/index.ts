@@ -41,7 +41,12 @@ export async function getAnalysis(
 ): Promise<AnalysisResp | ProgressRespT> {
   if (IS_MOCK) return mockApi.getAnalysis(qid)
 
-  const { status, data } = await request(ENDPOINTS.analysis(qid), passThrough, options)
+  // 懒生成首响应可能要 12s+（后端 PIPELINE_FAKE_DURATION_MS），单次超时放宽到 30s；
+  // hot/health 没有生成交互，维持 http.ts 的默认 12s
+  const { status, data } = await request(ENDPOINTS.analysis(qid), passThrough, {
+    ...options,
+    timeoutMs: options?.timeoutMs ?? 30_000,
+  })
   const isSnapshot =
     status === 200 ||
     (typeof data === 'object' &&

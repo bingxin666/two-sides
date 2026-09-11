@@ -197,10 +197,11 @@ export async function search(query: string, count = 10): Promise<ZhihuItem[]> {
   return list
 }
 
+/** null = 额度未知（契约 QuotaResp 三字段均 nullable），绝不用 0/-1 谎报 */
 export interface QuotaMap {
-  zhihu_search: number
-  hot_list: number
-  zhida_openai: number
+  zhihu_search: number | null
+  hot_list: number | null
+  zhida_openai: number | null
 }
 
 /**
@@ -229,14 +230,14 @@ export async function quota(): Promise<QuotaMap | null> {
 
 /**
  * 额度响应形状不确定（可能是 map / 数组 / 嵌套），统一收敛成三个数。
- * 取不到就 -1，让前端知道「未知」而不是谎报 0。
+ * 取不到就 null（额度未知），让前端显示「额度未知」而不是谎报 0。
  */
 function normalizeQuota(data: unknown): QuotaMap {
-  const out: QuotaMap = { zhihu_search: -1, hot_list: -1, zhida_openai: -1 }
+  const out: QuotaMap = { zhihu_search: null, hot_list: null, zhida_openai: null }
   const put = (key: string, val: unknown) => {
     if (!(key in out)) return
     const n = typeof val === 'number' ? val : Number(val)
-    if (Number.isFinite(n)) out[key as keyof QuotaMap] = Math.max(-1, Math.trunc(n))
+    if (Number.isFinite(n) && n >= 0) out[key as keyof QuotaMap] = Math.trunc(n)
   }
   if (Array.isArray(data)) {
     for (const row of data as Array<Record<string, unknown>>) {

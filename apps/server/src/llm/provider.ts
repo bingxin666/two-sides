@@ -195,6 +195,10 @@ export async function callAgent<T = string>(
   let lastErr: unknown = null
   for (const path of order) {
     const target = resolveAgent(agent, path)
+    // 「未配置」（yaml 里没绑 / env 里没 key）在解析期就被跳过：
+    // 不发起请求、也不计入 failover 阈值 —— 否则 D1 场景下
+    // deepseek/glm/qwen 都没配 key 时，每个请求都要先空转 3 次「假失败」才落到 origami。
+    // 只有「真的发出去并失败了」才 noteFailure()。
     if (!target) continue
     try {
       const res = await chat<T>({

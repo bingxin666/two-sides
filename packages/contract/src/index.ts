@@ -46,6 +46,8 @@ export const ErrorCode = z.enum([
   'llm_error',
   'timeout',
   'parse_error',
+  /** 主端点 404：qid 非法或非问答页。不是 job 失败，是请求本身不可满足 —— 前端给「不存在」态，永不给重试按钮 */
+  'not_found',
 ])
 
 /* ============================================================
@@ -191,6 +193,7 @@ export const ERROR_COPY: Record<
   llm_error: { message: '分析服务暂时不可用', retryable: true },
   timeout: { message: '生成超时，可重试', retryable: true },
   parse_error: { message: '结果解析异常，可重试', retryable: true },
+  not_found: { message: '这个问题不存在，或不是可分析的问答页', retryable: false },
 }
 
 /**

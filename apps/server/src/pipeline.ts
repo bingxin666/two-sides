@@ -32,6 +32,12 @@ const EXTRACT_CONCURRENCY = 4
 /** 03 取向并发 */
 const ORIENT_CONCURRENCY = 6
 
+/**
+ * 综述降级计数（进程内累计，评审期观察降化率；也可挂到 /health 之外的诊断口）。
+ * 只增不减，不参与任何业务判断。
+ */
+export const summaryDegradation = { count: 0 }
+
 export function createAgents(mode: 'fake' | 'llm'): PipelineAgents {
   if (mode === 'fake') return createFakeAgents()
   // D1：真实 LLM 实现，签名与 fake 完全一致
@@ -145,7 +151,7 @@ export async function runPipeline(
   }
   note('orient.done', { total: merged.length, ok: judgments.length })
 
-  /* ---------- 04 综述 ---------- */
+  /* ---------- 04 综述（题级，docs/01 §8 第 7 条：100/日 ÷ 30 题 = 每题 1 次） ---------- */
   ctx.report({ stage: 'render', stageRatio: 0.2, judgmentsTotal: judgments.length })
   let summaryText: string | undefined
   let summarySource: 'zhida' | 'fallback' | undefined
@@ -156,12 +162,18 @@ export async function runPipeline(
       summarySource = s.source ?? 'fallback'
     }
   } catch (e) {
-    // 综述是可选字段：降级为空，不把整个分析拖成 failed。
-    // 理由：直答额度只有 100/日（docs/03 §8.5 最紧的一项），
-    // 若因它失败就让全部题目 failed，预生成会整批报废。
-    note('summary.failed', {
+    // ⚠️ 有意偏离 docs/03 §6.1（「直答与回退都失败 → failed」），2026-09-12 team-lead 裁决采纳：
+    // 综述是可选字段，一次失败不该报废整批预生成 —— 直答额度只有 100/日（docs/03 §8.5 最紧的一项），
+    // 若因它把每道题都置 failed，30 题预生成会整批报废、懒生成路径也会被同一条额度拖死。
+    // 降级行为：summary / summarySource 缺省，前端按「无解读」展示（ui 已同步）。
+    // 评审期观察降级率：summaryDegradation.count + 下面的结构化日志。
+    summaryDegradation.count++
+    log.warn('pipeline.summary.degraded', {
+      qid: ctx.qid,
+      total: summaryDegradation.count,
       reason: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
     })
+    note('summary.degraded', { total: summaryDegradation.count })
   }
 
   /* ---------- 组装 ---------- */
@@ -170,6 +182,8 @@ export async function runPipeline(
     .filter((j) => j.participantCount > 0)
     .map<Judgment>((j) => {
       const { relatedAnswerIds: _drop, ...rest } = j
+      // 04 综述是题级一次调用，产出后拆分挂到每条 judgment.summary（额度：100/日 ÷ 30 题）。
+      // D1 真实直答路径 summarySource 必须标 'zhida'，降级标 'fallback' —— 前端据此双态展示。
       if (summaryText) {
         return { ...rest, summary: summaryText, summarySource: summarySource ?? 'fallback' }
       }

@@ -99,7 +99,10 @@ export async function request<T>(
   let payload: unknown = json
   if (isEnvelope(json)) {
     // 成功：{ code, data }；失败：{ code, message }
-    if (json.code !== 0) throw new ApiError(json.code, json.message ?? `接口返回错误 ${json.code}`, res.status)
+    // 兼容两种信封约定：code === 0（最终统一形态），或 code 直接承载 HTTP 状态码
+    // （过渡形态，2xx 视为成功）。404/5xx 一律失败，HTTP 200 里包业务错误也能拦住。
+    const codeOk = json.code === 0 || (json.code >= 200 && json.code < 300)
+    if (!codeOk) throw new ApiError(json.code, json.message ?? `接口返回错误 ${json.code}`, res.status)
     payload = json.data
   } else if (!res.ok) {
     throw new ApiError(res.status, `请求失败（HTTP ${res.status}）`, res.status)

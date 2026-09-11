@@ -187,7 +187,8 @@ pnpm build      # 全 workspace 构建
 ```bash
 cp .env.example .env          # 填入真实值
 pnpm install
-pnpm -F @two-sides/web build  # 产出 apps/web/dist
+pnpm -F @two-sides/web build    # 产出 apps/web/dist（Caddy 挂载）
+pnpm -F @two-sides/server build # 产出 apps/server/dist/index.js（server 镜像 COPY）
 docker compose up -d --build
 ```
 

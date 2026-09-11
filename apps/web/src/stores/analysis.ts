@@ -86,7 +86,8 @@ export const useAnalysisStore = defineStore('analysis', () => {
   }
 
   function errorFrom(e: unknown): ProgressError {
-    if (e instanceof ApiError && e.status === 404) return makeError('parse_error')
+    // 404：qid 非法或非问答页 —— 请求本身不可满足，not_found 且永不给重试按钮
+    if (e instanceof ApiError && (e.status === 404 || e.code === 404)) return makeError('not_found')
     return makeError('zhihu_error')
   }
 

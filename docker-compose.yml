@@ -12,8 +12,9 @@
 #
 # 前置：
 #   1. cp .env.example .env 并填入真实值
-#   2. pnpm install && pnpm -F @two-sides/web build   （产出 apps/web/dist）
-#   3. 确保 apps/server/Dockerfile 存在（由后端负责）
+#   2. pnpm install
+#   3. pnpm -F @two-sides/web build     （产出 apps/web/dist，web 卷挂载用）
+#   4. pnpm -F @two-sides/server build  （产出 apps/server/dist/index.js，server 镜像 COPY 用）
 # ============================================================
 
 services:
