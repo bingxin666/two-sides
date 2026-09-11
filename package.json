@@ -1,0 +1,20 @@
+{
+  "name": "two-sides",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "两面 · 知乎黑客松 2026 —— 把社区回答提炼成判断，每条判断展开成一条取向光谱",
+  "license": "MIT",
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "typescript": "^5.6.3"
+  },
+  "scripts": {
+    "web": "pnpm -F @two-sides/web dev",
+    "server": "pnpm -F @two-sides/server dev",
+    "typecheck": "pnpm -r typecheck",
+    "build": "pnpm -r build"
+  }
+}

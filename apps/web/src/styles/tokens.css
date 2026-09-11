@@ -1,0 +1,50 @@
+/**
+ * 两面 · 设计 Token
+ * 全部数值来自 docs/02-前端开发文档.md §3.1（Ardot 设计稿 1440×900 实测），非估算，勿"优化"。
+ * 字体族只声明本地栈，不引外链 CDN（部署环境可能无外网），缺失逐级兜底。
+ */
+
+:root {
+  /* ---- 墨色阶 ---- */
+  --ink: #1C1B19;        /* 主文字 / CTA 底 */
+  --ink-deep: #0D0D0F;   /* 钉子胶囊 / 竖线 / 光谱圆点 */
+  --ink-soft: #23231C;   /* PinMeta 数字 */
+  --muted: #8B877C;      /* 次级文字 / 声明行 */
+  --faint: #B8B2A6;      /* T1 等待态阶段文字 */
+  --line: #E2DFD8;       /* 输入框 / 引用卡描边 */
+
+  /* ---- 面与卡 ---- */
+  --card-line: rgba(28, 28, 25, .10);    /* 热榜卡描边 */
+  --card-glass: rgba(255, 255, 255, .90); /* 热榜卡底 */
+  --quote-bg: #F7F6F3;   /* 引用卡底 */
+  --tag-bg: #F2F0EA;     /* 「已选中 · L4」标签底 */
+
+  /* ---- 光谱两端定义文字 ---- */
+  --end-l: #5FA2C0;      /* 左端（蓝） */
+  --end-r: #D5A475;      /* 右端（琥珀） */
+
+  /* ---- 光谱五档（MiniBand，linear 90deg：0/25/50/75/100%） ---- */
+  --spectrum-1: #2E80A8;
+  --spectrum-2: #5EA3BF;
+  --spectrum-3: #C7C2B0;
+  --spectrum-4: #D6A475;
+  --spectrum-5: #BA8A42;
+
+  /* ---- 字体族 ---- */
+  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
+  --font-sans: 'Inter', 'Sarasa Gothic SC', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  --font-body: 'Sarasa Gothic SC', '更纱黑体 SC', 'Inter', 'PingFang SC',
+    'Microsoft YaHei', system-ui, sans-serif;
+
+  /* ---- 布局几何（1440×900 基准） ---- */
+  --page-pad: 48px;
+  --radius-card: 10px;
+  --radius-pill: 26px;
+  --veil-h: 600px;
+  --veil-h-collapsed: 300px;
+
+  /* ---- 运动 ---- */
+  --ease-veil: cubic-bezier(.22, .61, .36, 1);
+  --dur-veil: .5s;
+}

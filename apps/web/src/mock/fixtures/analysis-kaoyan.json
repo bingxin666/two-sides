@@ -1,0 +1,997 @@
+{
+  "qid": "651382904",
+  "question": "26 考研现在开始准备，还来得及吗？",
+  "date": "2026-09-12",
+  "sampleCount": 21,
+  "judgments": [
+    {
+      "id": "j1",
+      "text": "现在开始准备，时间上完全来得及",
+      "participantCount": 8,
+      "divergence": "extreme",
+      "commentChallengeCount": 3,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "时间充裕",
+        "right": "时间紧张"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "老张聊考研",
+              "badge": "考研规划师",
+              "authority": 3,
+              "quote": "三月开始一点不晚，我带过八月上岸的。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3910284756?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "明确断言「八月上岸」都可行，属最乐观一档",
+              "voteUp": 3482
+            },
+            {
+              "name": "时间管理阿伟",
+              "authority": 1,
+              "quote": "我算过，两千小时绰绰有余。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7294051836?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "用小时数论证时间充足，无保留",
+              "voteUp": 642
+            },
+            {
+              "name": "机构从业者小林",
+              "badge": "某考研机构教研",
+              "authority": 2,
+              "quote": "我们秋季班每年都有上车的。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6182739405?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以秋季班成功案例支持时间充裕",
+              "voteUp": 1187
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "上岸的小周",
+              "badge": "某 985 在读硕士",
+              "authority": 2,
+              "quote": "够是够，但得天天在线，别断。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6173920485?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "肯定来得及但附加了强度条件，偏乐观侧",
+              "voteUp": 2054
+            },
+            {
+              "name": "专业课第一",
+              "badge": "专业课 140+",
+              "authority": 2,
+              "quote": "公共课来得及，专业课看你底子。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3948571620?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "分科判断，整体仍偏「来得及」",
+              "voteUp": 1736
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "图书馆常客",
+              "authority": 2,
+              "quote": "来不来得及，全看你考什么学校。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6471820395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把结论交给目标院校，不站任何一端",
+              "voteUp": 508
+            },
+            {
+              "name": "ellen在读书",
+              "authority": 2,
+              "quote": "这个问题没有统一答案，看人。",
+              "url": "https://www.zhihu.com/question/651382904/answer/4657382910?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "明确拒绝给出单一结论，居中",
+              "voteUp": 331
+            }
+          ]
+        },
+        {
+          "slot": 4,
+          "authors": [
+            {
+              "name": "陈墨白",
+              "badge": "教育学博士",
+              "authority": 4,
+              "quote": "统计上，晚起步的通过率显著更低。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5081736429?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "用群体数据否定「完全来得及」，偏紧张一侧",
+              "voteUp": 8721
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        0,
+        0,
+        1,
+        0
+      ],
+      "summary": "这条判断上，答主们几乎分成两半：一线规划者与机构从业者强调「时间够用」，并举出秋季上岸的具体案例；而以群体统计为依据的一方则指出，晚起步的通过率在样本上显著更低。分歧主要不在事实，而在「来得及」是针对个人还是针对平均人。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "j2",
+      "text": "全程班是非报不可的",
+      "participantCount": 7,
+      "divergence": "high",
+      "commentChallengeCount": 5,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "必须报班",
+        "right": "完全自学"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "机构从业者小林",
+              "badge": "某考研机构教研",
+              "authority": 2,
+              "quote": "不报班你连信息差都填不平。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6182739405?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把报班视为刚需，态度最强",
+              "voteUp": 1187
+            },
+            {
+              "name": "老张聊考研",
+              "badge": "考研规划师",
+              "authority": 3,
+              "quote": "自律差的，花钱买监督很值。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3910284756?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "按自律程度推荐报班，偏向必报一端",
+              "voteUp": 3482
+            },
+            {
+              "name": "一只考研鹅",
+              "authority": 1,
+              "quote": "我全套都报了，图个心安。",
+              "url": "https://www.zhihu.com/question/651382904/answer/1729384650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自身全报行为站到必报端",
+              "voteUp": 96
+            },
+            {
+              "name": "半路出家",
+              "authority": 1,
+              "quote": "跨考不报班根本摸不着门。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7583940612?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "在跨考场景下认定必须报班",
+              "voteUp": 274
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "上岸的小周",
+              "badge": "某 985 在读硕士",
+              "authority": 2,
+              "quote": "我只报了单科，没必要全包。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6173920485?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "认可报班但否定「全程」，略偏自学侧",
+              "voteUp": 2054
+            },
+            {
+              "name": "不考数学的人",
+              "authority": 1,
+              "quote": "网盘资料加答疑就够了。",
+              "url": "https://www.zhihu.com/question/651382904/answer/2918374650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "用低成本替代方案取代全程班",
+              "voteUp": 415
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "陈墨白",
+              "badge": "教育学博士",
+              "authority": 4,
+              "quote": "报班和上岸率之间没有显著相关。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5081736429?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "直接否定判断本身的前提，居中",
+              "voteUp": 8721
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "多数答主倾向「报班有用」，但强度差异明显：机构与规划从业者的表述接近刚需，上岸考生则普遍只认可单科或资料替代。唯一给出统计口径的一方认为报班与上岸率无显著相关，把争端从「要不要」转向「证据是什么」。",
+      "summarySource": "fallback"
+    },
+    {
+      "id": "j3",
+      "text": "数学应该先把教材啃透再刷题",
+      "participantCount": 7,
+      "divergence": "mid",
+      "orientStatus": "partial",
+      "semanticAxis": {
+        "left": "先啃教材",
+        "right": "直接刷题"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "数学不难的",
+              "authority": 1,
+              "quote": "教材例题没吃透，刷题就是抄答案。",
+              "url": "https://www.zhihu.com/question/651382904/answer/2847193056?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "明确要求先教材后刷题",
+              "voteUp": 1403
+            },
+            {
+              "name": "王老师讲规划",
+              "badge": "高校教师",
+              "authority": 4,
+              "quote": "定义定理不过关，做再多也白搭。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5962017384?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把教材基础视为刷题前置条件",
+              "voteUp": 5310
+            },
+            {
+              "name": "图书馆常客",
+              "authority": 2,
+              "quote": "我第一遍就是啃书，慢但稳。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6471820395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自身顺序支持教材优先",
+              "voteUp": 508
+            },
+            {
+              "name": "不吃香菜的猫",
+              "authority": 1,
+              "quote": "先看书，心里才有底。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5061728394?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "简短表态，归教材优先一端",
+              "voteUp": 189
+            },
+            {
+              "name": "专业课第一",
+              "badge": "专业课 140+",
+              "authority": 2,
+              "quote": "基础章节我都是先过教材的。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3948571620?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "限定在基础章节先教材，偏教材侧",
+              "voteUp": 1736
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "二战选手阿哲",
+              "authority": 1,
+              "quote": "书看两遍就够了，剩下靠题。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3049582716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "承认需要教材但拒绝「啃透」，略偏刷题",
+              "voteUp": 762
+            },
+            {
+              "name": "时间管理阿伟",
+              "authority": 1,
+              "quote": "真题才是教材，别的都是引子。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7294051836?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把真题置于教材之上，偏刷题侧",
+              "voteUp": 642
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "summary": "这条判断上，多数答主支持「先过一遍教材」，但对立面并非主张完全跳过教材，而是认为教材只需快速过一遍、真正的信息量在真题里。归位时只有书面明确表态者被纳入，另有两条回答因未说明顺序而未归位。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "j4",
+      "text": "每天学够十小时才可能上岸",
+      "participantCount": 5,
+      "divergence": "high",
+      "commentChallengeCount": 2,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "必须十小时",
+        "right": "效率优先"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "时间管理阿伟",
+              "authority": 1,
+              "quote": "我每天十二小时，少一小时都不踏实。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7294051836?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "主张强度高于十小时，属最强调时长一端",
+              "voteUp": 642
+            },
+            {
+              "name": "一只考研鹅",
+              "authority": 1,
+              "quote": "十小时是门槛，不是目标。",
+              "url": "https://www.zhihu.com/question/651382904/answer/1729384650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把十小时定为下限，完全支持判断",
+              "voteUp": 96
+            },
+            {
+              "name": "机构从业者小林",
+              "badge": "某考研机构教研",
+              "authority": 2,
+              "quote": "我们统计的高分学员都在十小时以上。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6182739405?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以学员数据支持高强度必要性",
+              "voteUp": 1187
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "深夜自习室",
+              "authority": 2,
+              "quote": "八小时有效时间比十小时磨洋工强。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7382910465?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "否定十小时门槛但不否定强度，略偏效率侧",
+              "voteUp": 892
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "数据说话",
+              "badge": "教育数据研究者",
+              "authority": 4,
+              "quote": "时长和分数的相关性没那么强。",
+              "url": "https://www.zhihu.com/question/651382904/answer/8391046572?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "从相关性角度否定判断前提，居中",
+              "voteUp": 6104
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "支持方把十小时视为「门槛」并以高分学员时长作证，反对方并不主张少学，而是强调有效时间。真正的分歧点是「十小时」这个数字本身能不能作为通用标准。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "j5",
+      "text": "政治放到九月再开始也来得及",
+      "participantCount": 5,
+      "divergence": "low",
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "九月开始够",
+        "right": "越早越好"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "政治七十分",
+              "badge": "考研政治讲师",
+              "authority": 3,
+              "quote": "政治是后期科目，九月开正好。",
+              "url": "https://www.zhihu.com/question/651382904/answer/4839205716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "明确给出九月开始的推荐",
+              "voteUp": 2965
+            },
+            {
+              "name": "上岸的小周",
+              "badge": "某 985 在读硕士",
+              "authority": 2,
+              "quote": "我十月才看，最后七十三。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6173920485?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以更晚起步仍高分支持原判断",
+              "voteUp": 2054
+            },
+            {
+              "name": "不考数学的人",
+              "authority": 1,
+              "quote": "前面别浪费时间在政治上。",
+              "url": "https://www.zhihu.com/question/651382904/answer/2918374650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "反对过早开始政治，站九月侧",
+              "voteUp": 415
+            },
+            {
+              "name": "半路出家",
+              "authority": 1,
+              "quote": "背太早也忘，九月刚刚好。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7583940612?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以遗忘曲线论证九月合适",
+              "voteUp": 274
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "王老师讲规划",
+              "badge": "高校教师",
+              "authority": 4,
+              "quote": "基础弱的，暑假就该过一轮。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5962017384?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "按基础分情况，否定一刀切的九月",
+              "voteUp": 5310
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        1,
+        0,
+        0,
+        0
+      ],
+      "summary": "这是本页少见的低分歧判断：绝大多数答主（含政治讲师）都认可政治属于后期科目，九月甚至十月开始均可。唯一的保留意见针对基础薄弱者，主张暑假先过一轮。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "j6",
+      "text": "英语单词必须一直背到考前一天",
+      "participantCount": 4,
+      "divergence": "low",
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "背到考前",
+        "right": "核心词够用"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "英语八十分",
+              "badge": "英语语言文学硕士",
+              "authority": 3,
+              "quote": "断一天就掉，我背到进考场前。",
+              "url": "https://www.zhihu.com/question/651382904/answer/1928374650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "主张坚持到考前最后一天",
+              "voteUp": 1874
+            },
+            {
+              "name": "图书馆常客",
+              "authority": 2,
+              "quote": "每天二十分钟，不能停。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6471820395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "强调不间断，支持原判断",
+              "voteUp": 508
+            },
+            {
+              "name": "一只考研鹅",
+              "authority": 1,
+              "quote": "我之前停过两周，全忘光了。",
+              "url": "https://www.zhihu.com/question/651382904/answer/1729384650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自身遗忘经历支持持续背诵",
+              "voteUp": 96
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "ellen在读书",
+              "authority": 2,
+              "quote": "后期该刷真题，别再啃单词书。",
+              "url": "https://www.zhihu.com/question/651382904/answer/4657382910?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "认为后期应转向真题，略偏核心词侧",
+              "voteUp": 331
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        0,
+        0,
+        0,
+        0
+      ],
+      "summary": "分歧度低：绝大多数答主认为单词需要持续滚动到考前，理由是遗忘速度快。少数反对者并非主张不背，而是建议后期把时间从单词书转移到真题语境。",
+      "summarySource": "fallback"
+    },
+    {
+      "id": "j7",
+      "text": "三战四战是值得的",
+      "participantCount": 6,
+      "divergence": "high",
+      "commentChallengeCount": 4,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "值得再战",
+        "right": "及时止损"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "三战上岸的老李",
+              "authority": 2,
+              "quote": "我第三次才上，现在觉得值。",
+              "url": "https://www.zhihu.com/question/651382904/answer/2739150846?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自身三战成功经历明确支持",
+              "voteUp": 1338
+            },
+            {
+              "name": "二战选手阿哲",
+              "authority": 1,
+              "quote": "已经投进去了，退场更亏。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3049582716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "用沉没成本逻辑支持继续再战",
+              "voteUp": 762
+            },
+            {
+              "name": "半路出家",
+              "authority": 1,
+              "quote": "就差几分，不二战说不过去。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7583940612?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "在分差小的前提下支持再战",
+              "voteUp": 274
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "深夜自习室",
+              "authority": 2,
+              "quote": "两次是上限，第三次要想清楚。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7382910465?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "给再战设上限，偏向止损一侧",
+              "voteUp": 892
+            },
+            {
+              "name": "不吃香菜的猫",
+              "authority": 1,
+              "quote": "我三战失败了，代价是三年。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5061728394?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以失败代价反对多次再战",
+              "voteUp": 189
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "数据说话",
+              "badge": "教育数据研究者",
+              "authority": 4,
+              "quote": "第三次的成功率会明显掉一截。",
+              "url": "https://www.zhihu.com/question/651382904/answer/8391046572?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "只陈述概率趋势，不直接站边，居中",
+              "voteUp": 6104
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "支持者依据的是个人成功经历与沉没成本，反对者依据的是机会成本与失败案例，两类的论证方式完全不同。给出统计口径的一方只指出第三次成功率下降，未直接给出「值不值」的结论。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "j8",
+      "text": "择校就应该冲名校",
+      "participantCount": 8,
+      "divergence": "extreme",
+      "commentChallengeCount": 7,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "冲名校",
+        "right": "求稳上岸"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "一只考研鹅",
+              "authority": 1,
+              "quote": "不上名校，考研图什么？",
+              "url": "https://www.zhihu.com/question/651382904/answer/1729384650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把名校视为考研唯一目的，态度最强",
+              "voteUp": 96
+            },
+            {
+              "name": "时间管理阿伟",
+              "authority": 1,
+              "quote": "冲一次，失败了也不亏。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7294051836?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "主张优先冲高，接受失败风险",
+              "voteUp": 642
+            },
+            {
+              "name": "专业课第一",
+              "badge": "专业课 140+",
+              "authority": 2,
+              "quote": "我报的时候就没给自己留退路。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3948571620?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以不留退路的择校行为支持冲高",
+              "voteUp": 1736
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "老张聊考研",
+              "badge": "考研规划师",
+              "authority": 3,
+              "quote": "可以冲，但得留一个保底校。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3910284756?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "支持冲高但要求保底，略偏冲的一侧",
+              "voteUp": 3482
+            },
+            {
+              "name": "上岸的小周",
+              "badge": "某 985 在读硕士",
+              "authority": 2,
+              "quote": "我冲了，但专业是降档的。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6173920485?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以降档换名校，仍偏冲高侧",
+              "voteUp": 2054
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "图书馆常客",
+              "authority": 2,
+              "quote": "看你要学历还是要方向。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6471820395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把选择交给个人目标，居中",
+              "voteUp": 508
+            },
+            {
+              "name": "机构从业者小林",
+              "badge": "某考研机构教研",
+              "authority": 2,
+              "quote": "我们一般按模考分推荐。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6182739405?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以分数为依据，不预设冲或稳",
+              "voteUp": 1187
+            }
+          ]
+        },
+        {
+          "slot": 4,
+          "authors": [
+            {
+              "name": "陈墨白",
+              "badge": "教育学博士",
+              "authority": 4,
+              "quote": "第一学历歧视下，求稳更现实。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5081736429?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "从就业现实出发主张求稳，偏稳一侧",
+              "voteUp": 8721
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        1,
+        0,
+        1,
+        0
+      ],
+      "summary": "这条判断分歧度极高，是本页评论质疑最多的一条：从「不上名校图什么」到「求稳更现实」，中间还夹着「冲但要保底」「按模考分决定」两类折中立场。值得注意的是，两端的依据都是就业现实，只是对风险的估价相反。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "j9",
+      "text": "脱产全职备考比在职备考靠谱得多",
+      "participantCount": 7,
+      "divergence": "high",
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "脱产备考",
+        "right": "在职备考"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "二战选手阿哲",
+              "authority": 1,
+              "quote": "辞职那一年，效率翻倍。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3049582716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以辞职后的效率提升支持脱产",
+              "voteUp": 762
+            },
+            {
+              "name": "时间管理阿伟",
+              "authority": 1,
+              "quote": "边上班边考，基本是自我安慰。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7294051836?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "直接否定在职备考可行性",
+              "voteUp": 642
+            },
+            {
+              "name": "机构从业者小林",
+              "badge": "某考研机构教研",
+              "authority": 2,
+              "quote": "我们全日制班的出分明显更好。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6182739405?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以班级类型出分差异支持脱产",
+              "voteUp": 1187
+            },
+            {
+              "name": "不考数学的人",
+              "authority": 1,
+              "quote": "在职考上的都是狠人，我不行。",
+              "url": "https://www.zhihu.com/question/651382904/answer/2918374650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "自认无法在职完成，站脱产一侧",
+              "voteUp": 415
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "三战上岸的老李",
+              "authority": 2,
+              "quote": "脱产确实好，但压力会反噬。",
+              "url": "https://www.zhihu.com/question/651382904/answer/2739150846?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "承认优势但强调心理成本，略偏在职侧",
+              "voteUp": 1338
+            },
+            {
+              "name": "深夜自习室",
+              "authority": 2,
+              "quote": "我边上边考，两年也上了。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7382910465?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以在职成功经历部分否定原判断",
+              "voteUp": 892
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "王老师讲规划",
+              "badge": "高校教师",
+              "authority": 4,
+              "quote": "关键在可支配时间，不在辞没辞职。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5962017384?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把变量换成可支配时间，居中",
+              "voteUp": 5310
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "支持脱产的一方强调时间与效率，反对的一方并不否认这点，而是补上了经济压力与心理成本。给出第三方视角的一方把问题重述为「可支配时间」，使这条判断的分歧从方式转向成本承担。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "j10",
+      "text": "专业课至少要背够三遍",
+      "participantCount": 5,
+      "divergence": "low",
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "背三遍以上",
+        "right": "理解即可"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "专业课第一",
+              "badge": "专业课 140+",
+              "authority": 2,
+              "quote": "我背了五遍，考场才写得出来。",
+              "url": "https://www.zhihu.com/question/651382904/answer/3948571620?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "主张遍数高于三遍，最强支持",
+              "voteUp": 1736
+            },
+            {
+              "name": "上岸的小周",
+              "badge": "某 985 在读硕士",
+              "authority": 2,
+              "quote": "三遍是底线，我身边都这样。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6173920485?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把三遍定为底线，完全支持",
+              "voteUp": 2054
+            },
+            {
+              "name": "一只考研鹅",
+              "authority": 1,
+              "quote": "背少了到考场真的想不起来。",
+              "url": "https://www.zhihu.com/question/651382904/answer/1729384650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以提取失败经验支持多轮背诵",
+              "voteUp": 96
+            },
+            {
+              "name": "不吃香菜的猫",
+              "authority": 1,
+              "quote": "我背了两遍，最后大题没写出来。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5061728394?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以不足三遍的失败反证该判断",
+              "voteUp": 189
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "陈墨白",
+              "badge": "教育学博士",
+              "authority": 4,
+              "quote": "遍数不等于提取强度，得自测。",
+              "url": "https://www.zhihu.com/question/651382904/answer/5081736429?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "否定以遍数为标准，略偏理解侧",
+              "voteUp": 8721
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "summary": "低分歧：多数答主认可「三遍」这一经验值，并以自身考场提取经历作证。唯一的异议来自学习科学视角，认为遍数是过程指标、提取强度才是结果指标。",
+      "summarySource": "fallback"
+    },
+    {
+      "id": "j11",
+      "text": "机构的押题班真能押中",
+      "participantCount": 6,
+      "divergence": "mid",
+      "commentChallengeCount": 6,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "押题有用",
+        "right": "押题是玄学"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "机构从业者小林",
+              "badge": "某考研机构教研",
+              "authority": 2,
+              "quote": "去年政治大题我们中了三道。",
+              "url": "https://www.zhihu.com/question/651382904/answer/6182739405?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以机构命中案例支持押题有效",
+              "voteUp": 1187
+            },
+            {
+              "name": "政治七十分",
+              "badge": "考研政治讲师",
+              "authority": 3,
+              "quote": "押的是方向，不是原题。",
+              "url": "https://www.zhihu.com/question/651382904/answer/4839205716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "承认有效性但限定为方向，偏有用侧",
+              "voteUp": 2965
+            },
+            {
+              "name": "半路出家",
+              "authority": 1,
+              "quote": "我全靠押题卷，政治过了线。",
+              "url": "https://www.zhihu.com/question/651382904/answer/7583940612?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以个人过线经历支持押题",
+              "voteUp": 274
+            },
+            {
+              "name": "一只考研鹅",
+              "authority": 1,
+              "quote": "大家都买，不买心里慌。",
+              "url": "https://www.zhihu.com/question/651382904/answer/1729384650?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "出于从众心理认可押题班",
+              "voteUp": 96
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "三战上岸的老李",
+              "authority": 2,
+              "quote": "中过一次，后面两年都没中。",
+              "url": "https://www.zhihu.com/question/651382904/answer/2739150846?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以多年不稳定结果质疑押题",
+              "voteUp": 1338
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "数据说话",
+              "badge": "教育数据研究者",
+              "authority": 4,
+              "quote": "命中无法证伪，因为范围是全集。",
+              "url": "https://www.zhihu.com/question/651382904/answer/8391046572?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "指出命中率不可证伪，居中并质疑判断",
+              "voteUp": 6104
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "支持方给出的是命中案例与「押方向不押原题」的限定说法，反对方则指向命中率不可证伪这一方法论问题。本条评论质疑较多，主要集中在对「押中」定义的争论上。",
+      "summarySource": "zhida"
+    }
+  ]
+}

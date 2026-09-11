@@ -1,0 +1,32 @@
+# 两面 · 统一编辑器约定
+# 生效范围：VS Code / JetBrains / WebStorm 等支持 EditorConfig 的编辑器
+root = true
+
+[*]
+charset = utf-8
+end_of_line = lf
+indent_style = space
+indent_size = 2
+insert_final_newline = true
+trim_trailing_whitespace = true
+max_line_length = 100
+
+# Markdown 保留行尾双空格（换行语义），不裁剪
+[*.md]
+trim_trailing_whitespace = false
+max_line_length = off
+
+# YAML / JSON / Dockerfile 沿用 2 空格
+[*.{yml,yaml,json,jsonc}]
+indent_size = 2
+
+[Dockerfile]
+indent_size = 2
+
+# Go / Makefile 等要求 Tab 的工具链文件（本项目暂无，预留以防误用）
+[{Makefile,*.go}]
+indent_style = tab
+
+# Windows 批处理保留 CRLF
+[*.{cmd,bat,ps1}]
+end_of_line = crlf

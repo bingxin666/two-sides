@@ -8,6 +8,9 @@
 .env.*
 *.env
 !.env.example
+# apps/web/.env.development 只含 VITE_API_MODE / VITE_API_BASE 两个非涉密值，
+# 入库保证新克隆即可跑通 mock 模式；任何含密钥的 env 文件仍被上面规则拦截。
+!apps/web/.env.development
 
 # 密钥/证书等可能携带凭据的文件
 *.pem
@@ -88,3 +91,10 @@ temp/
 *.tmp
 *.bak
 *.orig
+_tmp_*
+
+# ---------- WorkBuddy 工作区数据（agent 记忆/任务，非项目代码） ----------
+.workbuddy/
+
+# Vite 运行时自动生成的临时配置副本
+apps/web/vite.config.ts.timestamp-*.mjs

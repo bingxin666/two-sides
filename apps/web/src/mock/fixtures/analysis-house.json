@@ -1,0 +1,1029 @@
+{
+  "qid": "642738519",
+  "question": "结婚一定要买房吗？",
+  "date": "2026-09-12",
+  "sampleCount": 19,
+  "judgments": [
+    {
+      "id": "h1",
+      "text": "结婚必须有一套写着自己名字的房子",
+      "participantCount": 8,
+      "divergence": "extreme",
+      "commentChallengeCount": 9,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "必须有房",
+        "right": "租房也行"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "丈母娘视角",
+              "authority": 1,
+              "quote": "没房子，我女儿嫁过去住哪？",
+              "url": "https://www.zhihu.com/question/642738519/answer/3847561029?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把有房当作结婚的绝对前置条件",
+              "voteUp": 3620
+            },
+            {
+              "name": "刚需上车",
+              "authority": 1,
+              "quote": "租房结婚，我过不了心里那关。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3640518279?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "从个人安全感出发主张必须买房",
+              "voteUp": 1537
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "房产中介小王",
+              "badge": "从业八年",
+              "authority": 2,
+              "quote": "能买就买，租的终归不是自己的。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5382910467?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "倾向买房但未使用绝对化表述",
+              "voteUp": 2058
+            },
+            {
+              "name": "周老师讲经济",
+              "badge": "经济学副教授",
+              "authority": 4,
+              "quote": "从产权保障看，有房还是更稳。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5928304716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以产权保障论证有房更稳，偏买房侧",
+              "voteUp": 6892
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "看城市，我们那边租房也正常。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把结论交给城市差异，不站任何一端",
+              "voteUp": 512
+            },
+            {
+              "name": "二线城市定居",
+              "authority": 2,
+              "quote": "房价不高就买，高了就先租。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2916408573?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以房价水平为条件，居中",
+              "voteUp": 664
+            }
+          ]
+        },
+        {
+          "slot": 4,
+          "authors": [
+            {
+              "name": "自由职业者Nina",
+              "authority": 1,
+              "quote": "我不买房，但会留一笔租房的钱。",
+              "url": "https://www.zhihu.com/question/642738519/answer/6473829150?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以长期租房方案替代买房，偏租房侧",
+              "voteUp": 1409
+            }
+          ]
+        },
+        {
+          "slot": 5,
+          "authors": [
+            {
+              "name": "租房也挺好",
+              "authority": 1,
+              "quote": "房子是住的，不是结婚证的条件。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2739140586?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "直接否定房子与结婚的绑定关系",
+              "voteUp": 1024
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "summary": "这是本页分歧度最高的一条，五档全部有人：从「没房子嫁过去住哪」到「房子不是结婚证的条件」，中间还分布着「看城市」「看房价」两类条件式立场。两端引用量都不低，说明这不是少数派观点，而是真实对立。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "h2",
+      "text": "房贷月供不该超过家庭收入的三成",
+      "participantCount": 7,
+      "divergence": "high",
+      "commentChallengeCount": 4,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "比例越低越好",
+        "right": "可以承受更高"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "金融民工老赵",
+              "badge": "某券商分析师",
+              "authority": 3,
+              "quote": "三成是警戒线，超了就是赌未来。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4758291036?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "明确把三成定为硬约束",
+              "voteUp": 4317
+            },
+            {
+              "name": "房贷计算器",
+              "authority": 2,
+              "quote": "超过三成，抗风险能力就没了。",
+              "url": "https://www.zhihu.com/question/642738519/answer/7194058263?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以抗风险能力论证低比例",
+              "voteUp": 918
+            },
+            {
+              "name": "反消费主义",
+              "authority": 1,
+              "quote": "我卡在两成，睡得着觉比什么都强。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5839204716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "主张比例低于三成，属最保守一档",
+              "voteUp": 2290
+            },
+            {
+              "name": "攒钱的小夫妻",
+              "authority": 1,
+              "quote": "我们按两成五做的预算。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4418273095?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "实际执行低于三成，支持该判断",
+              "voteUp": 736
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "周老师讲经济",
+              "badge": "经济学副教授",
+              "authority": 4,
+              "quote": "三成偏保守，收入增长要算进去。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5928304716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "认为三成过严，略偏可承受更高一侧",
+              "voteUp": 6892
+            },
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "前期紧一点，过两年就松了。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "接受阶段性高压，略偏宽松侧",
+              "voteUp": 512
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "数据派",
+              "badge": "统计师",
+              "authority": 3,
+              "quote": "三成这个数本身没什么统计依据。",
+              "url": "https://www.zhihu.com/question/642738519/answer/7061824395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "质疑该阈值的来源，居中",
+              "voteUp": 3266
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        1,
+        1,
+        0,
+        0
+      ],
+      "summary": "多数答主接受三成作为安全线，分歧集中在「要不要把未来收入增长算进去」。给出统计视角的一方指出这个阈值本身缺乏依据，把争端从比例拉回到指标有效性。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "h3",
+      "text": "为了孩子上学必须买学区房",
+      "participantCount": 9,
+      "divergence": "high",
+      "commentChallengeCount": 6,
+      "orientStatus": "partial",
+      "semanticAxis": {
+        "left": "必须买",
+        "right": "完全没必要"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "学区房老母亲",
+              "badge": "教育自媒体",
+              "authority": 2,
+              "quote": "学位就那么多，不买就排队。",
+              "url": "https://www.zhihu.com/question/642738519/answer/6183740295?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以学位稀缺性论证必须买",
+              "voteUp": 2451
+            },
+            {
+              "name": "丈母娘视角",
+              "authority": 1,
+              "quote": "孩子的学校，一步都不能让。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3847561029?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "态度绝对，完全支持原判断",
+              "voteUp": 3620
+            },
+            {
+              "name": "房产中介小王",
+              "badge": "从业八年",
+              "authority": 2,
+              "quote": "学区房是最好卖的一类，说明有共识。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5382910467?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以成交热度支持学区房必要性",
+              "voteUp": 2058
+            },
+            {
+              "name": "刚需上车",
+              "authority": 1,
+              "quote": "我们就是为孩子买的，没后悔。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3640518279?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自身决策支持必须买",
+              "voteUp": 1537
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "已婚十年",
+              "authority": 2,
+              "quote": "买了，但溢价那部分现在看是亏的。",
+              "url": "https://www.zhihu.com/question/642738519/answer/1927460385?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "承认行为但否定收益，略偏没必要侧",
+              "voteUp": 842
+            },
+            {
+              "name": "二线城市定居",
+              "authority": 2,
+              "quote": "我们这边民办也不差，不一定要买。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2916408573?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "提供替代路径，略偏非必须",
+              "voteUp": 664
+            },
+            {
+              "name": "攒钱的小夫妻",
+              "authority": 1,
+              "quote": "再等等，政策说不定就变了。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4418273095?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以政策不确定推迟决策，偏非必须",
+              "voteUp": 736
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "社会学研究生",
+              "badge": "某高校在读",
+              "authority": 3,
+              "quote": "学区房买的是同辈群体，不是老师。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8273940615?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "重述问题本质，不直接站边，居中",
+              "voteUp": 1176
+            },
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "看家庭现金流，不是看该不该。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把判断换成支付能力问题，居中",
+              "voteUp": 512
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "支持方依据学位稀缺，反对方并不否认学位价值，而是指出溢价部分已经脱离教育本身、且政策存在变动风险。另有两条回答把问题重述为「买的是同辈群体」或「取决于现金流」，因未给出必须/不必的明确表态而未纳入分布。",
+      "summarySource": "fallback"
+    },
+    {
+      "id": "h4",
+      "text": "房子仍然是最好的投资",
+      "participantCount": 9,
+      "divergence": "mid",
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "仍是好投资",
+        "right": "已经不是"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "房产中介小王",
+              "badge": "从业八年",
+              "authority": 2,
+              "quote": "至少比放在银行里强。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5382910467?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以相对收益肯定房产投资属性",
+              "voteUp": 2058
+            },
+            {
+              "name": "楼市观察者",
+              "badge": "房地产研究者",
+              "authority": 4,
+              "quote": "核心地段的稀缺性还没被证伪。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3301928475?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "限定核心地段后仍支持投资属性",
+              "voteUp": 12480
+            },
+            {
+              "name": "丈母娘视角",
+              "authority": 1,
+              "quote": "我们那代人都是靠房子翻身的。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3847561029?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以代际经验支持房产投资",
+              "voteUp": 3620
+            },
+            {
+              "name": "刚需上车",
+              "authority": 1,
+              "quote": "就算跌，自住也不算亏。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3640518279?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自住属性兜底支持买入",
+              "voteUp": 1537
+            },
+            {
+              "name": "攒钱的小夫妻",
+              "authority": 1,
+              "quote": "不知道买什么，就只能买房子。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4418273095?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "因缺乏替代标的而选择房产，偏支持侧",
+              "voteUp": 736
+            },
+            {
+              "name": "已婚十年",
+              "authority": 2,
+              "quote": "两套房子救过我们一次急。",
+              "url": "https://www.zhihu.com/question/642738519/answer/1927460385?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以变现救急经历支持房产的资产属性",
+              "voteUp": 842
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "二线城市定居",
+              "authority": 2,
+              "quote": "流动性和税费一算，收益没多少。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2916408573?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以交易成本削弱投资属性，略偏否定侧",
+              "voteUp": 664
+            },
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "现在更像是消费，不是投资。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把房产重新归类为消费，偏否定侧",
+              "voteUp": 512
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "周老师讲经济",
+              "badge": "经济学副教授",
+              "authority": 4,
+              "quote": "要看租售比，全国差别太大。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5928304716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "指出需分城市讨论，不给统一结论，居中",
+              "voteUp": 6892
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "多数答主仍认可房子的资产属性，但理由已经从「上涨」转向「比别的选择强」。明确否定投资属性的一方依据的是流动性与税费。给出租售比视角的一方认为该判断无法在全国尺度上统一回答。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "h5",
+      "text": "掏空六个钱包付首付是合理的",
+      "participantCount": 7,
+      "divergence": "extreme",
+      "commentChallengeCount": 5,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "合理",
+        "right": "不该"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "丈母娘视角",
+              "authority": 1,
+              "quote": "一家人的钱，不就是给孩子的？",
+              "url": "https://www.zhihu.com/question/642738519/answer/3847561029?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "视家庭资金集中使用为理所当然",
+              "voteUp": 3620
+            },
+            {
+              "name": "房产中介小王",
+              "badge": "从业八年",
+              "authority": 2,
+              "quote": "首付不到位，月供再低也批不下来。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5382910467?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以贷款门槛论证集中资金的必要性",
+              "voteUp": 2058
+            },
+            {
+              "name": "刚需上车",
+              "authority": 1,
+              "quote": "我家就是这么凑的，不觉得丢人。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3640518279?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自身经历合理化该做法",
+              "voteUp": 1537
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "学区房老母亲",
+              "badge": "教育自媒体",
+              "authority": 2,
+              "quote": "可以借，但要写清楚是借还是给。",
+              "url": "https://www.zhihu.com/question/642738519/answer/6183740295?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "有条件接受，略偏不该一侧",
+              "voteUp": 2451
+            },
+            {
+              "name": "金融民工老赵",
+              "badge": "某券商分析师",
+              "authority": 3,
+              "quote": "可以借，但得留足老人的医疗钱。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4758291036?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以风险准备金为前提有条件接受，略偏不该一侧",
+              "voteUp": 4317
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "合理不合理，得看老人要不要看病。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以老人保障为条件，居中",
+              "voteUp": 512
+            }
+          ]
+        },
+        {
+          "slot": 4,
+          "authors": [
+            {
+              "name": "反消费主义",
+              "authority": 1,
+              "quote": "拿父母的养老钱换房子，我不干。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5839204716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "明确拒绝动用父母养老资金",
+              "voteUp": 2290
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "summary": "分歧度高：从「一家人的钱就是给孩子的」到「拿养老钱换房子我不干」，中间还有把出资重构为借款、以及以老人医疗需求设前提的两类立场。评论区的质疑集中在「掏空」的定义上。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "h6",
+      "text": "婚房应该由男方家庭出首付",
+      "participantCount": 8,
+      "divergence": "high",
+      "commentChallengeCount": 8,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "男方出",
+        "right": "双方共同承担"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "丈母娘视角",
+              "authority": 1,
+              "quote": "这是规矩，也是诚意。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3847561029?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以习俗与诚意主张男方出资",
+              "voteUp": 3620
+            },
+            {
+              "name": "刚需上车",
+              "authority": 1,
+              "quote": "我家出的，老婆家出装修，挺公平。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3640518279?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以分工形式支持男方出首付",
+              "voteUp": 1537
+            },
+            {
+              "name": "攒钱的小夫妻",
+              "authority": 1,
+              "quote": "两边各出一半，我们反而吵得少。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4418273095?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "实际为平摊，但认可出资方应明确，偏男方侧",
+              "voteUp": 736
+            },
+            {
+              "name": "二线城市定居",
+              "authority": 2,
+              "quote": "我们这边默认男方出，没啥好争的。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2916408573?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以地方默认习俗支持男方出资",
+              "voteUp": 664
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "已婚十年",
+              "authority": 2,
+              "quote": "谁出都行，写清楚份额就好。",
+              "url": "https://www.zhihu.com/question/642738519/answer/1927460385?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "不认同性别分工，略偏共同承担侧",
+              "voteUp": 842
+            },
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "看谁家有余力，别按性别分。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "主张按支付能力而非性别，偏共同侧",
+              "voteUp": 512
+            },
+            {
+              "name": "房产中介小王",
+              "badge": "从业八年",
+              "authority": 2,
+              "quote": "现在两边一起出的越来越多了。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5382910467?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以成交趋势转向共同出资，偏共同侧",
+              "voteUp": 2058
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "社会学研究生",
+              "badge": "某高校在读",
+              "authority": 3,
+              "quote": "这条习俗正在快速失效。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8273940615?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "只描述趋势，不表态该不该，居中",
+              "voteUp": 1176
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "支持方援引地方习俗与「诚意」，反对方则以支付能力和趋势变化回应，双方都不否认出资事实本身需要明确。评论质疑较多，主要针对「应该」是否构成义务。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "h7",
+      "text": "租房结婚也完全可行",
+      "participantCount": 7,
+      "divergence": "mid",
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "完全可行",
+        "right": "不可行"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "租房也挺好",
+              "authority": 1,
+              "quote": "租了六年，省下的钱拿去投资了。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2739140586?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以长期租房与资金再配置支持可行性",
+              "voteUp": 1024
+            },
+            {
+              "name": "不婚主义者阿岚",
+              "authority": 1,
+              "quote": "房子不该成为结婚的前置条件。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5062941837?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "从制度层面支持租房结婚",
+              "voteUp": 1873
+            },
+            {
+              "name": "自由职业者Nina",
+              "authority": 1,
+              "quote": "我们租的，生活质量反而高。",
+              "url": "https://www.zhihu.com/question/642738519/answer/6473829150?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以生活质量论证租房可行",
+              "voteUp": 1409
+            },
+            {
+              "name": "反消费主义",
+              "authority": 1,
+              "quote": "为结婚背三十年债，才是真冒险。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5839204716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以负债风险反向支持租房",
+              "voteUp": 2290
+            },
+            {
+              "name": "二线城市定居",
+              "authority": 2,
+              "quote": "我们这租金低，租着挺舒服。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2916408573?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "在低租金条件下支持租房",
+              "voteUp": 664
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "攒钱的小夫妻",
+              "authority": 1,
+              "quote": "能租，但孩子上学那关过不去。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4418273095?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "设置子女教育例外，略偏不可行侧",
+              "voteUp": 736
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "数据派",
+              "badge": "统计师",
+              "authority": 3,
+              "quote": "可行性和稳定性是两件事。",
+              "url": "https://www.zhihu.com/question/642738519/answer/7061824395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "区分概念后不作结论，居中",
+              "voteUp": 3266
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "支持租房结婚的一方集中在生活质量、资金灵活性与负债风险三个理由上，反对声音并不强，但普遍提出子女教育这个例外条件。给出概念区分的一方提醒「可行」与「稳定」不是同一件事。",
+      "summarySource": "fallback"
+    },
+    {
+      "id": "h8",
+      "text": "应该先买房再谈结婚",
+      "participantCount": 6,
+      "divergence": "low",
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "先买房",
+        "right": "先结婚"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "丈母娘视角",
+              "authority": 1,
+              "quote": "房没定，婚期就不定。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3847561029?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "把买房作为婚期的前置条件",
+              "voteUp": 3620
+            },
+            {
+              "name": "刚需上车",
+              "authority": 1,
+              "quote": "我们就是先买了房才领的证。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3640518279?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以自身顺序支持先买房",
+              "voteUp": 1537
+            },
+            {
+              "name": "房产中介小王",
+              "badge": "从业八年",
+              "authority": 2,
+              "quote": "多数客户还是先定房再定日子。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5382910467?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以客户行为顺序支持先买房",
+              "voteUp": 2058
+            },
+            {
+              "name": "学区房老母亲",
+              "badge": "教育自媒体",
+              "authority": 2,
+              "quote": "早买早锁定学区，别拖。",
+              "url": "https://www.zhihu.com/question/642738519/answer/6183740295?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以学区锁定为由主张先买房",
+              "voteUp": 2451
+            },
+            {
+              "name": "已婚十年",
+              "authority": 2,
+              "quote": "先买房那会儿确实踏实。",
+              "url": "https://www.zhihu.com/question/642738519/answer/1927460385?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以心理安定感支持先买房",
+              "voteUp": 842
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "数据派",
+              "badge": "统计师",
+              "authority": 3,
+              "quote": "先买还是先结，数据上没什么差别。",
+              "url": "https://www.zhihu.com/question/642738519/answer/7061824395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "认为顺序不构成决定性差异，略偏先结婚侧",
+              "voteUp": 3266
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        1,
+        0,
+        0,
+        0
+      ],
+      "summary": "这是本页分歧度最低的一条：绝大多数答主（含中介与家长视角）都认可「先定房再定日子」这一顺序，理由集中在确定性上。唯一的不同声音主张先共同生活一年再决策。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "h9",
+      "text": "一线城市买不起就该离开",
+      "participantCount": 7,
+      "divergence": "high",
+      "commentChallengeCount": 3,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "该离开",
+        "right": "该留下"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "二线城市定居",
+              "authority": 2,
+              "quote": "我回来了，房子车子都有了。",
+              "url": "https://www.zhihu.com/question/642738519/answer/2916408573?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以回流后的生活改善支持离开",
+              "voteUp": 664
+            },
+            {
+              "name": "反消费主义",
+              "authority": 1,
+              "quote": "为一套房耗掉二十年，不值当。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5839204716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以机会成本论证应当离开",
+              "voteUp": 2290
+            },
+            {
+              "name": "自由职业者Nina",
+              "authority": 1,
+              "quote": "我远程办公，在哪都一样。",
+              "url": "https://www.zhihu.com/question/642738519/answer/6473829150?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以工作方式解除地域绑定，支持离开",
+              "voteUp": 1409
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "产业和医院都在那儿，回去干啥？",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以公共资源论证应当留下，略偏留下侧",
+              "voteUp": 512
+            },
+            {
+              "name": "已婚十年",
+              "authority": 2,
+              "quote": "留下来难，但孩子的起点不一样。",
+              "url": "https://www.zhihu.com/question/642738519/answer/1927460385?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以子女发展机会支持留下",
+              "voteUp": 842
+            },
+            {
+              "name": "攒钱的小夫妻",
+              "authority": 1,
+              "quote": "再撑两年，攒够就回。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4418273095?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "短期留下长期离开，略偏离开侧",
+              "voteUp": 736
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "社会学研究生",
+              "badge": "某高校在读",
+              "authority": 3,
+              "quote": "这不该由房价单独决定。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8273940615?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "否定单一变量决定论，居中",
+              "voteUp": 1176
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        0,
+        0,
+        1,
+        0,
+        0
+      ],
+      "summary": "离开方以生活质量与机会成本为据，留下方以产业、医疗与子女起点为据，两类理由几乎不交叉。中间还夹着「再撑两年就回」这种时间分期立场。第三方提醒去留不应由房价单独决定。",
+      "summarySource": "zhida"
+    },
+    {
+      "id": "h10",
+      "text": "房价还会继续跌，现在不该上车",
+      "participantCount": 7,
+      "divergence": "high",
+      "commentChallengeCount": 4,
+      "orientStatus": "done",
+      "semanticAxis": {
+        "left": "还会继续跌",
+        "right": "基本见底"
+      },
+      "scaleDirection": "left_to_right",
+      "distribution": [
+        {
+          "slot": 1,
+          "authors": [
+            {
+              "name": "反消费主义",
+              "authority": 1,
+              "quote": "还在下行通道，急什么。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5839204716?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "判断仍在下行趋势中，主张观望",
+              "voteUp": 2290
+            },
+            {
+              "name": "不婚主义者阿岚",
+              "authority": 1,
+              "quote": "我看了三年，每年都有人说见底。",
+              "url": "https://www.zhihu.com/question/642738519/answer/5062941837?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "质疑见底说法，明确支持继续下跌判断",
+              "voteUp": 1873
+            },
+            {
+              "name": "数据派",
+              "badge": "统计师",
+              "authority": 3,
+              "quote": "挂牌量还在涨，价格没到平衡点。",
+              "url": "https://www.zhihu.com/question/642738519/answer/7061824395?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以库存指标支持尚未见底",
+              "voteUp": 3266
+            }
+          ]
+        },
+        {
+          "slot": 2,
+          "authors": [
+            {
+              "name": "自由职业者Nina",
+              "authority": 1,
+              "quote": "再等等看，反正我也不急。",
+              "url": "https://www.zhihu.com/question/642738519/answer/6473829150?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "倾向观望但未断言下跌，略偏看跌侧",
+              "voteUp": 1409
+            },
+            {
+              "name": "城市打工人",
+              "authority": 2,
+              "quote": "我们小区最近成交价是没再降了。",
+              "url": "https://www.zhihu.com/question/642738519/answer/8295017463?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "以小区成交观察否定继续下跌，偏见底侧",
+              "voteUp": 512
+            }
+          ]
+        },
+        {
+          "slot": 3,
+          "authors": [
+            {
+              "name": "金融民工老赵",
+              "badge": "某券商分析师",
+              "authority": 3,
+              "quote": "分化得很厉害，别用全国一个数。",
+              "url": "https://www.zhihu.com/question/642738519/answer/4758291036?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "指出需分城市分板块，居中",
+              "voteUp": 4317
+            },
+            {
+              "name": "楼市观察者",
+              "badge": "房地产研究者",
+              "authority": 4,
+              "quote": "一线核心和远郊已经不是一个市场。",
+              "url": "https://www.zhihu.com/question/642738519/answer/3301928475?utm_medium=openapi_platform&utm_source=zhihu_search",
+              "reason": "强调结构性分化，不给单向结论，居中",
+              "voteUp": 12480
+            }
+          ]
+        }
+      ],
+      "authorityDistribution": [
+        1,
+        0,
+        2,
+        0,
+        0
+      ],
+      "summary": "看跌方依据的是挂牌量与「每年都有人说见底」的预期落差，看稳方依据的是局部成交价企稳。两位专业背景答主都拒绝在全国尺度上给结论，认为一线核心与远郊已经分裂成不同市场。",
+      "summarySource": "zhida"
+    }
+  ]
+}

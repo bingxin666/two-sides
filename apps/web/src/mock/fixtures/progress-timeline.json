@@ -1,0 +1,66 @@
+[
+  {
+    "status": "pending",
+    "stage": "extract",
+    "stageRatio": 0,
+    "sampleCount": 0,
+    "judgmentsDone": 0,
+    "judgmentsTotal": 0
+  },
+  {
+    "status": "generating",
+    "stage": "extract",
+    "stageRatio": 0.35,
+    "sampleCount": 7,
+    "judgmentsDone": 0,
+    "judgmentsTotal": 0
+  },
+  {
+    "status": "generating",
+    "stage": "extract",
+    "stageRatio": 1,
+    "sampleCount": 19,
+    "judgmentsDone": 0,
+    "judgmentsTotal": 0
+  },
+  {
+    "status": "generating",
+    "stage": "merge",
+    "stageRatio": 0.6,
+    "sampleCount": 19,
+    "judgmentsDone": 0,
+    "judgmentsTotal": 12
+  },
+  {
+    "status": "generating",
+    "stage": "merge",
+    "stageRatio": 1,
+    "sampleCount": 19,
+    "judgmentsDone": 0,
+    "judgmentsTotal": 12
+  },
+  {
+    "status": "generating",
+    "stage": "orient",
+    "stageRatio": 0.42,
+    "sampleCount": 19,
+    "judgmentsDone": 5,
+    "judgmentsTotal": 12
+  },
+  {
+    "status": "generating",
+    "stage": "orient",
+    "stageRatio": 0.83,
+    "sampleCount": 19,
+    "judgmentsDone": 10,
+    "judgmentsTotal": 12
+  },
+  {
+    "status": "generating",
+    "stage": "render",
+    "stageRatio": 0.55,
+    "sampleCount": 19,
+    "judgmentsDone": 12,
+    "judgmentsTotal": 12
+  }
+]

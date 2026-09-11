@@ -1,0 +1,48 @@
+# 两面 · LLM Provider 与 Agent 绑定
+#
+# 铁律（docs/04 §4）：本文件只写 env 变量名，永远不写密钥字面量。
+# 任何出现真实密钥字面量的改动都是事故，评审前必查（安全扫描会对本文件 grep）。
+#
+# docs/03 §3：服务商与模型解耦，Agent 按名引用；failover 只在 Agent 级，
+# 主路径连续失败 FAILOVER_THRESHOLD（默认 3）次后切到 fallback。
+# 知乎直答不在这套配置里（独立鉴权与模型档位，见 llm/zhida 的 D1 实现）。
+
+providers:
+  - name: deepseek
+    baseUrl: https://api.deepseek.com/v1
+    apiKeyEnv: DEEPSEEK_API_KEY
+    models: [deepseek-chat, deepseek-reasoner]
+
+  - name: glm
+    baseUrl: https://open.bigmodel.cn/api/paas/v4
+    apiKeyEnv: GLM_API_KEY
+    models: [glm-4-flash, glm-4-plus]
+
+  - name: qwen
+    baseUrl: https://dashscope.aliyuncs.com/compatible-mode/v1
+    apiKeyEnv: QWEN_API_KEY
+    models: [qwen-plus, qwen-turbo]
+
+  # 中转端点（OpenAI 兼容）。baseUrl 非涉密，key 仍只从 env 读。
+  - name: origami
+    baseUrl: https://ai.origami.pub/v1
+    apiKeyEnv: ORIGAMI_API_KEY
+    models: [deepseek-v4-flash]
+
+agents:
+  extract:
+    provider: deepseek
+    model: deepseek-chat
+    fallback: { provider: origami, model: deepseek-v4-flash }
+  merge:
+    provider: deepseek
+    model: deepseek-reasoner
+    fallback: { provider: glm, model: glm-4-plus }
+  orient:
+    provider: deepseek
+    model: deepseek-chat
+    fallback: { provider: qwen, model: qwen-plus }
+  # 仅直答额度耗尽时用于综述降级
+  summaryFallback:
+    provider: glm
+    model: glm-4-flash
