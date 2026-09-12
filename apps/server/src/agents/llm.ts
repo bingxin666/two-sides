@@ -612,7 +612,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       const out = await callJson('merge', MergeOut, MERGE_SYSTEM, payload, ctx, 'merge', 120_000)
 
       const known = new Set(items.map((i) => i.answerId))
-      const out2: MergedJudgment[] = (out.judgments ?? [])
+      const modelMerged: MergedJudgment[] = (out.judgments ?? [])
         .map((j, i) => {
           // answerIds 只认输入里出现过的 id，防编造；模型漏填时从 sourceQuotes 反查补齐。
           const explicitIds = (j.answerIds ?? []).filter((id) => known.has(id))
@@ -629,8 +629,69 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
             answerIds: ids,
           }
         })
-        // 契约建议 10–15 条：超出时按模型给出的顺序保留前 15（保持模型自己的重要性排序）
-        .slice(0, 15)
+        // 丢弃完全无法追溯到抽取判断的模型条目。保留这种条目会让 orient
+        // 退化为全池投票，既可能污染观点，也会挤掉可追溯的少数派保底项。
+        .filter((j) => j.answerIds.length > 0 || j.sourceQuotes.some((quote) =>
+          items.some((item) => quoteMatchesExtracted(quote, item.quote)),
+        ))
+      // 契约建议 10–15 条：保持模型给出的重要性顺序，但不要让模型
+      // 静默丢掉某个独立判断。尤其是一条回答里拆出的第二个主张、少数派
+      // 反例，若既没有 answerId 也没有 sourceQuotes 被任何结果覆盖，之前
+      // 会在这里永久消失，导致“尽可能多展示分歧”失效。
+      const covered = new Set<string>()
+      for (const merged of modelMerged) {
+        // 相同的短句可能出现在多个回答中；只有唯一命中，或 answerIds
+        // 能把命中范围缩到唯一回答时，sourceQuote 才能建立可靠归属。
+        const quoteLinkedIds = new Set<string>()
+        for (const quote of merged.sourceQuotes) {
+          const matches = items.filter((item) => quoteMatchesExtracted(quote, item.quote))
+          const constrained = merged.answerIds.length > 0
+            ? matches.filter((item) => merged.answerIds.includes(item.answerId))
+            : matches
+          const candidates = constrained.length > 0 ? constrained : matches
+          if (candidates.length === 1) quoteLinkedIds.add(candidates[0]!.answerId)
+        }
+        for (const item of items) {
+          // sourceQuotes 是判断级别的精确归属；仅有 answerId 时，如果一条
+          // 回答拆出了多个判断，不能把它们全部标成已覆盖，否则模型漏掉的
+          // 第二个主张仍会被静默吞掉。只有该答主尚未被本结果覆盖时，
+          // answerId 才足以建立一个保守归属。
+          const quoteLinked = quoteLinkedIds.has(item.answerId)
+          // 若模型只给 answerId 而没有 sourceQuotes，只能保守地把该答主
+          // 的一个判断视为已覆盖；其余同答主判断会进入 orphanFallbacks，
+          // 避免一条归并结果误标掉整篇回答的多个独立主张。
+          const idOnlyLinked = !quoteLinked && merged.answerIds.includes(item.answerId) &&
+            ![...covered].some((key) => key.startsWith(`${item.answerId}\u0000`))
+          const linked = quoteLinked || idOnlyLinked
+          if (linked) covered.add(`${item.answerId}\u0000${item.text}`)
+        }
+      }
+      const orphanFallbacks: MergedJudgment[] = []
+      for (const item of items) {
+        const key = `${item.answerId}\u0000${item.text}`
+        if (covered.has(key)) continue
+        orphanFallbacks.push({
+          id: `jfallback${orphanFallbacks.length + 1}`,
+          text: item.text,
+          sourceQuotes: [item.quote],
+          answerIds: [item.answerId],
+        })
+      }
+      // 为未覆盖的细分判断预留少量席位；否则模型一旦输出满 15 条，
+      // 保底项仍会在 slice 时全部消失。最多预留 5 个，避免回退项挤掉
+      // 模型已排序的主要议题。
+      const fallbackBudget = Math.min(orphanFallbacks.length, 5)
+      const out2 = [
+        ...modelMerged.slice(0, Math.max(0, 15 - fallbackBudget)),
+        ...orphanFallbacks.slice(0, fallbackBudget),
+      ]
+      if (orphanFallbacks.length > 0) {
+        ctx.note('merge.orphan_preserved', {
+          modelJudgments: modelMerged.length,
+          preserved: fallbackBudget,
+          droppedByLimit: Math.max(0, orphanFallbacks.length - fallbackBudget),
+        })
+      }
       // 服务端定 id：模型只负责内容，id 由我们保证唯一与稳定
       return out2
     },
