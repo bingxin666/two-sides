@@ -2,9 +2,13 @@
 /**
  * T1 生成中（docs/02 §6.2）：四阶段进度 + RevealMask
  * 进度只读 GET /analysis 的 202 响应（stage + stageRatio），没有独立 progress 端点
+ * 看山动图（fox-t1，看山操作电脑 = 正在分析）：仅本组件挂载时加载/播放，
+ * 进 N2 / 失败态即随组件卸载释放；180px 源展示 140px，禁进首屏（T1 是生成态非首屏）
  */
 import { computed } from 'vue'
 import type { ProgressResp, Stage } from '@two-sides/contract'
+
+import foxT1 from '@/assets/liukanshan/fox-t1.webp'
 
 const props = withDefaults(defineProps<{ progress?: ProgressResp | null }>(), { progress: null })
 const emit = defineEmits<{ (e: 'cancel'): void }>()
@@ -32,27 +36,40 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
 <template>
   <section class="t1">
     <div class="t1__inner">
-      <!-- sampleCount 未就绪时诚实降级，不显示「从 0 条回答」 -->
-      <p v-if="sampleCount > 0" class="t1__lead">正在从 {{ sampleCount }} 条回答中提炼判断</p>
-      <p v-else class="t1__lead">正在检索相关回答</p>
+      <div class="t1__main">
+        <!-- sampleCount 未就绪时诚实降级，不显示「从 0 条回答」 -->
+        <p v-if="sampleCount > 0" class="t1__lead">正在从 {{ sampleCount }} 条回答中提炼判断</p>
+        <p v-else class="t1__lead">正在检索相关回答</p>
 
-      <ol class="t1__stages">
-        <li
-          v-for="(s, i) in STAGES"
-          :key="s.key"
-          class="stage"
-          :class="{
-            'stage--done': i < stageIndex,
-            'stage--current': i === stageIndex,
-            'stage--wait': i > stageIndex,
-          }"
-        >
-          <span class="stage__no">{{ s.no }}</span>
-          <span class="stage__label">{{ s.label }}</span>
-        </li>
-      </ol>
+        <ol class="t1__stages">
+          <li
+            v-for="(s, i) in STAGES"
+            :key="s.key"
+            class="stage"
+            :class="{
+              'stage--done': i < stageIndex,
+              'stage--current': i === stageIndex,
+              'stage--wait': i > stageIndex,
+            }"
+          >
+            <span class="stage__no">{{ s.no }}</span>
+            <span class="stage__label">{{ s.label }}</span>
+          </li>
+        </ol>
 
-      <button type="button" class="t1__cancel" @click="emit('cancel')">取消</button>
+        <button type="button" class="t1__cancel" @click="emit('cancel')">取消</button>
+      </div>
+
+      <img
+        class="t1__fox"
+        :src="foxT1"
+        width="140"
+        height="140"
+        alt=""
+        aria-hidden="true"
+        loading="lazy"
+        decoding="async"
+      />
     </div>
 
     <div class="t1__mask" :style="{ width: `${(1 - total) * 100}%` }" aria-hidden="true" />
@@ -64,6 +81,24 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
   position: relative;
   overflow: hidden;
   padding: 4px 0 8px;
+}
+
+.t1__inner {
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.t1__main {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* 看山操作电脑：随 RevealMask 一起被揭示（mask 覆盖整个 .t1，图在最右、最后显现） */
+.t1__fox {
+  flex: 0 0 auto;
+  width: 140px;
+  height: 140px;
 }
 
 .t1__lead {
@@ -136,6 +171,11 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
   .t1__stages {
     flex-wrap: wrap;
     gap: 12px 24px;
+  }
+
+  .t1__fox {
+    width: 96px;
+    height: 96px;
   }
 }
 </style>

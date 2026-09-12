@@ -10,6 +10,8 @@ import { useRouter } from 'vue-router'
 import type { SearchCandidate } from '@two-sides/contract'
 import { getSearch } from '@/api'
 
+import foxHello from '@/assets/liukanshan/fox-hello.webp'
+
 const router = useRouter()
 
 const DEBOUNCE_MS = 350
@@ -151,7 +153,20 @@ watch(open, (v) => {
         <li v-if="shortHint" class="search__note">输入至少 {{ MIN_CHARS }} 个字再搜索</li>
         <li v-else-if="loading" class="search__note">搜索中…</li>
         <li v-else-if="error" class="search__note">{{ error }}</li>
-        <li v-else-if="items.length === 0" class="search__note">没有找到相关问题，换个说法试试</li>
+        <!-- 空结果：看山打招呼安抚（下拉打开才挂载，不算首屏；卸载即释放） -->
+        <li v-else-if="items.length === 0" class="search__empty">
+          <img
+            class="search__empty-fox"
+            :src="foxHello"
+            width="72"
+            height="72"
+            alt=""
+            aria-hidden="true"
+            loading="lazy"
+            decoding="async"
+          />
+          <span class="search__empty-text">没有找到相关问题，换个说法试试</span>
+        </li>
         <template v-else>
           <li
             v-for="(c, i) in items"
@@ -285,6 +300,29 @@ watch(open, (v) => {
   line-height: 18px;
   color: var(--muted);
   cursor: default;
+}
+
+/* 空结果态：看山 hello 小尺寸居中，克制不喧宾 */
+.search__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 16px 14px 14px;
+  cursor: default;
+}
+
+.search__empty-fox {
+  display: block;
+  width: 72px;
+  height: 72px;
+}
+
+.search__empty-text {
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--muted);
 }
 
 @media (max-width: 1024px) {
