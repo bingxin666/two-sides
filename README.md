@@ -147,8 +147,8 @@ pnpm build      # 全 workspace 构建
 | `ANALYSIS_RETRY_COOLDOWN_SEC` | 可选 | `60` | `failed` 后再试的冷却窗口，防连点打穿额度 |
 | `ANALYSIS_JOB_TIMEOUT_SEC` | 可选 | `180` | 单 job 总时限，超时置 `timeout` |
 | `LLM_RPM_LIMIT` | 可选 | `60` | 全局令牌桶，防打爆 LLM 与知乎限频 |
-| `ZHIHU_LIVE` | 可选 | `0` | **安全开关**：只有 `=1` 且凭证已配置才允许真实知乎调用，默认严禁消耗黑客松日额度。**必须与 `PIPELINE_MODE=llm` 成对设置**（见下方警告） |
-| `PIPELINE_MODE` | 可选 | `fake` | `fake` 走本地确定性管线（不调 LLM，适合联调与演练）/ `llm` 走真实多智能体管线。**必须与 `ZHIHU_LIVE=1` 成对设置**（见下方警告） |
+| `ZHIHU_LIVE` | 可选 | `1` | **安全开关**：只有 `=1` 且凭证已配置才允许真实知乎调用，默认严禁消耗黑客松日额度。**必须与 `PIPELINE_MODE=llm` 成对设置**（见下方警告） |
+| `PIPELINE_MODE` | 可选 | `llm` | `llm` 走真实多智能体管线；`fake` 仅在显式指定时走本地确定性管线。**必须与 `ZHIHU_LIVE=1` 成对设置**（见下方警告） |
 | `PIPELINE_FAKE_DURATION_MS` | 可选 | `12000` | fake 管线的模拟时长，留足时间观察轮询与 T1 进度态 |
 | `RECOVER_ON_BOOT` | 可选 | `true` | 启动时是否重放上一轮未完成的 job |
 | `ORIGAMI_API_KEY` | 可选 | — | `providers.yaml` 中中转服务商 `origami` 的 key |
@@ -232,3 +232,4 @@ docker compose up -d --build
 - [`docs/02-前端开发文档.md`](./docs/02-前端开发文档.md) —— 页面、状态、视觉还原
 - [`docs/03-后端开发文档.md`](./docs/03-后端开发文档.md) —— 端点、管线、状态机、部署
 - [`docs/04-环境变量与密钥清单.md`](./docs/04-环境变量与密钥清单.md) —— 凭证单一事实源
+

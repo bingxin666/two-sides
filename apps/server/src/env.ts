@@ -79,6 +79,14 @@ function str(name: string, def: string): string {
   return raw === undefined || raw === '' ? def : raw
 }
 
+function pipelineMode(): 'fake' | 'llm' {
+  const raw = process.env.PIPELINE_MODE
+  // 真实管线是默认路径；fake 只能通过显式 PIPELINE_MODE=fake 开启。
+  if (raw === undefined || raw === '') return 'llm'
+  if (raw === 'llm' || raw === 'fake') return raw
+  throw new Error(`PIPELINE_MODE 必须是 llm 或 fake，当前值无效: ${raw}`)
+}
+
 /** 与项目其它位置保持一致：SQLite 路径变量名沿用文档里的 ZHIDUAN_DB_PATH */
 export const env = {
   PORT: num('SERVER_PORT', 3000),
@@ -99,8 +107,8 @@ export const env = {
   ZHIHU_LIVE: bool('ZHIHU_LIVE', false),
   ZHIHU_ZHIDA_MODEL: str('ZHIHU_ZHIDA_MODEL', 'zhida-thinking-1p5'),
 
-  /** 管线实现选择：fake（D0 默认，确定性）/ llm（D1 真实调用） */
-  PIPELINE_MODE: str('PIPELINE_MODE', 'fake') as 'fake' | 'llm',
+  /** 管线实现选择：llm 默认；fake 仅在显式 PIPELINE_MODE=fake 时启用 */
+  PIPELINE_MODE: pipelineMode(),
   /** fake 管线总时长（毫秒），留足时间给前端看轮询 */
   PIPELINE_FAKE_DURATION_MS: num('PIPELINE_FAKE_DURATION_MS', 12_000),
 

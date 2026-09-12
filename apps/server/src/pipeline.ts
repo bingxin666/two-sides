@@ -8,7 +8,7 @@
  *   04 综述：1 路；直答优先，额度耗尽降级 summaryFallback
  *
  * 实现选择由 createAgents(mode) 决定：
- *   fake（D0 默认，确定性、不联网） / llm（D1 真实调用）
+ *   fake（仅显式开启，确定性、不联网） / llm（真实调用）
  * 两者共用同一组 PipelineAgents 接口，本文件不含任何模型或网络细节。
  */
 

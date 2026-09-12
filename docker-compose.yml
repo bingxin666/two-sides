@@ -78,11 +78,11 @@ services:
       GLM_API_KEY: ${GLM_API_KEY:-}
       QWEN_API_KEY: ${QWEN_API_KEY:-}
       ORIGAMI_API_KEY: ${ORIGAMI_API_KEY:-}
-      # ---- 管线开关（安全默认：不烧额度）----
-      # 生产默认开启真实知乎搜索；本地/演练环境请在 .env 中显式设为 0
+      # ---- 管线开关 ----
+      # 生产默认走真实知乎与 LLM；本地演练若需要假数据，必须显式设为 fake/0
       ZHIHU_LIVE: ${ZHIHU_LIVE:-1}
-      # fake = 确定性假数据（不调 LLM）；llm = 真实多智能体管线
-      PIPELINE_MODE: ${PIPELINE_MODE:-fake}
+      # fake = 确定性假数据（仅显式开启）；llm = 真实多智能体管线
+      PIPELINE_MODE: ${PIPELINE_MODE:-llm}
       PIPELINE_FAKE_DURATION_MS: ${PIPELINE_FAKE_DURATION_MS:-12000}
       RECOVER_ON_BOOT: ${RECOVER_ON_BOOT:-true}
       # ---- 运行时 ----
