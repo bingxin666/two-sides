@@ -105,8 +105,15 @@ export interface PipelineAgents {
     ctx: PipelineContext,
   ): Promise<OrientedJudgment | null>
 
-  /** 04 综述：直答优先，额度耗尽降级外部 LLM */
-  summarize(answers: RawAnswer[], ctx: PipelineContext): Promise<SummarizeResult>
+  /**
+   * 04 综述：刘看山人格解读（2026-09-12 起外部 LLM 承载，不再走知乎直答）。
+   * judgments 为取向完成后的判断列表（含光谱分布与分歧度），供人格如实描述。
+   */
+  summarize(
+    answers: RawAnswer[],
+    judgments: OrientedJudgment[],
+    ctx: PipelineContext,
+  ): Promise<SummarizeResult>
 }
 
 export class PipelineError extends Error {

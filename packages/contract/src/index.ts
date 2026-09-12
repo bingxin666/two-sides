@@ -29,8 +29,14 @@ export const Slot = z.union([z.literal(1), z.literal(2), z.literal(3), z.literal
 
 export const OrientStatus = z.enum(['done', 'partial'])
 
-/** 综述来源必须保留，前端据此双态展示（来源标识不可弱化） */
-export const SummarySource = z.enum(['zhida', 'fallback'])
+/**
+ * 综述来源，前端据此展示来源徽标（来源标识不可弱化）。
+ * 2026-09-12 产品决策：看山解读改由「刘看山人格」生成（外部 LLM 承载，
+ * 不再调用知乎直答 —— 直答 100/日额度瓶颈随之消除）。
+ * - liukanshan：刘看山人格生成（当前唯一产出路径），徽标「刘看山解读 · AI 生成」
+ * - zhida / fallback：历史快照兼容保留，新数据不再产出
+ */
+export const SummarySource = z.enum(['zhida', 'fallback', 'liukanshan'])
 
 /** 管线四阶段。failed 时 stage 表示失败发生的阶段 */
 export const Stage = z.enum(['extract', 'merge', 'orient', 'render'])

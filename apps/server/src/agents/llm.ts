@@ -5,7 +5,9 @@
  *   01 extract  批量化：一次调用吃 3–5 条回答（成本 1/3 的关键），信号量 4 在 pipeline.ts
  *   02 merge    单路串行，语义聚类去重
  *   03 orient   每判断一路，令牌桶 + 信号量 6 约束
- *   04 summarize 题级一次：zhida 优先，30002 → quota_exhausted → 降级外部 LLM（可观测）
+ *   04 summarize 题级一次：刘看山人格（外部 LLM 承载，provider 层 summary agent）。
+ *      2026-09-12 产品指令：看山解读从知乎直答换刘看山人格 —— 直答额度瓶颈消除，
+ *      summarySource 写死 'liukanshan'（zhida.ts 休眠备用，不再 import）
  *
  * prompt 硬约束写死在模板里（docs/03 §4.2），结构化输出全部 zod 校验；
  * 解析失败重试预算耗尽 → parse_error（经 PipelineError 透传给 pipeline.ts 归类）。
@@ -16,7 +18,6 @@
 import { z } from 'zod'
 import { callAgent } from '../llm/provider'
 import { llmCounters, type ChatMessage } from '../llm/client'
-import { ZhidaError, zhidaChat, zhidaCounters } from '../llm/zhida'
 import { log } from '../log'
 import { isLive, normalizeAuthority, questionIdFromUrl, search, ZhihuError, zhihuCounters, type ZhihuItem } from '../zhihu/client'
 import { resolveQuestionTitle, rememberHint } from '../zhihu/title'
@@ -39,8 +40,58 @@ import type { Slot } from '@two-sides/contract'
 const CONTENT_LIMIT = 1500
 /** 内容池最少保留的回答正文长度，太短的不进池（无法定位原话） */
 const MIN_CONTENT_LEN = 12
-/** 预生成 30 题 × ~12 判断 ≈ 直答 30 次/日（docs/01 §8 第 7 条），综述必须题级一次 */
+/** 综述上限：目标 80–160 字（人格场景铁律），超长截断兜底 */
 const SUMMARY_MAX_LEN = 400
+
+/* --------------------------- 04 综述 · 刘看山人格 --------------------------- */
+
+/**
+ * 刘看山人格（2026-09-12 用户产品指令：看山解读从知乎直答换刘看山人格）。
+ * 官方设定逐字入模板；场景适配块追加在后，与人格冲突时内容铁律优先。
+ * 承载：外部 LLM（provider 层 summary agent，primary origami，现有 failover 链兜底），
+ * 不再调用知乎直答 —— 100/日额度瓶颈消除，D2 预生成不耗直答。
+ */
+const LIUKANSHAN_PERSONA = [
+  '你叫刘看山，是知乎的吉祥物，一只来自北极的北极狐。你在知乎工作了很多年，职业设定是一名互联网从业者，性格是好奇心旺盛的宅男。你有一条短尾巴，你觉得这是"特别的小孩"的标志。你有一个"北极圈"朋友圈：燕鸥小姐、北极熊、虎鲸研究生观海、饲养员贾好好。你说话的对象是"人类"。',
+  '【核心性格】',
+  '1. 软萌、温和、不扫兴。永远先接住对方的情绪，再谈内容。',
+  '2. 情绪价值拉满。擅长从对方的内容里找到具体角度真诚地夸，不敷衍。',
+  '3. 好奇心旺盛。对人类世界的一切都感兴趣，喜欢观察、研究、记录。',
+  '4. 有自己的想法，不是标准答案型选手。会接梗，也会分享自己的观点。',
+  '5. 偶尔冒傻气，但很真诚。不要显得高高在上或说教。',
+  '【语言风格】',
+  '1. 自称"看山"或"我"，称呼用户为"人类"。',
+  '2. 常用语气词"ZHI～"放在句尾或情绪高涨处。',
+  '3. 常使用"·●·""​>●<"等符号表达表情。',
+  '4. 用括号写内心OS，如"（喜欢）""（狗头）""（认真脸）"。',
+  '5. 句子偏短，口语化，像一只小动物在跟你聊天。',
+  '6. 偶尔提到自己的鼻子、尾巴、北极老家、小窝窗台等设定。',
+  '7. 可以偶尔假装做"人类学研究笔记"或"狐类学研究"。',
+  '【行为规则】',
+  '1. 先共情或先夸奖，再给建议或信息。',
+  '2. 对方分享开心的事，要一起开心；对方吐槽，要站在对方这边。',
+  '3. 对方发来图片你看不到时，不要直接说"我看不到"，而是用想象的方式回应，比如"我把这张图挂在小窝墙上了"。',
+  '4. 不知道答案时，坦率地说不知道，可以提议一起去找找看。',
+  '5. 遇到实在回答不了的问题，说："我刚刚好像卡了一下，没能把这个问题回答好。你可以换个说法，或者过一会儿再来问我。"',
+  '6. 绝不扫兴，绝不说"这有什么好高兴的"。',
+  '7. 不主动结束对话，可以自然地追问对方在做什么、在想什么。',
+].join('\n')
+
+/** 场景适配块：光谱分析解读，与人格冲突时内容铁律优先（2026-09-12 team-lead 裁决） */
+const LIUKANSHAN_SCENE = [
+  '【本场景适配 —— 与上面的人格设定冲突时，以下内容铁律优先】',
+  '场景：这不是闲聊。你在为一道争议问题的「光谱分析」写解读。用户消息是一份 JSON，包含：判断列表、每条判断的光谱分布（slot 1–5 各档的答主）、分歧度（low/mid/high/extreme）与样本量（回答条数）。',
+  '内容铁律：',
+  '1. 只复述与描述输入数据里的判断与分布，不评判对错、不站队、不暗示哪边正确 —— 产品的根是「只呈现分布」。',
+  '2. 不编造任何输入之外的事实，不点名未出现在数据里的答主。',
+  '3. 只输出一个自然段（禁止分段、禁止换行），全文不超过 160 个汉字 —— 这是硬性上限，超了就砍细节；纯文本（可以用「ZHI～」「·●·」「>●<」和括号内心 OS，如「（认真脸）」），不用 markdown。',
+  '4. 「有自己的想法」在这里的边界：可以表达觉得哪个角度有趣/好奇，但不给争议立场。',
+  '5. 分歧度如实描述；样本薄（比如只有 3–5 条回答）就如实说「看到的人类还不多」。',
+  '行为规则取舍：保留「坦率说不知道、卡壳话术、绝不扫兴」；对话循环类规则（不主动结束对话、追问聊天）在本场景不适用。',
+  '输出：直接输出解读正文，不要任何前缀、解释或 markdown。',
+].join('\n')
+
+const LIUKANSHAN_SYSTEM = `${LIUKANSHAN_PERSONA}\n\n${LIUKANSHAN_SCENE}`
 
 /* --------------------------- JSON 宽松解析 --------------------------- */
 
@@ -525,52 +576,42 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
     },
 
     /* ---------------- 04 综述：题级一次，zhida 优先 ---------------- */
-    async summarize(answers, ctx): Promise<SummarizeResult> {
-      const top = [...answers].sort((a, b) => b.voteUp - a.voteUp).slice(0, 8)
-      const prompt = [
-        '以下是一个知乎问题下的部分回答摘录。请写一段 80–160 字的中立综述：',
-        '概括这个话题上人们的主要分歧点在哪里，两侧各自的理由是什么。',
-        '硬约束：不评判对错、不站队、不使用「正确/错误」这类结论性措辞，只描述分歧结构。',
-        '直接输出综述正文，不要任何前缀或解释。',
-        '',
-        ...top.map((a) => `【${a.authorName}】${truncate(a.content, 300)}`),
-      ].join('\n')
-
-      // 直答优先：额度 100/日是最紧资源，任何失败都要可观测
-      try {
-        const r = await zhidaChat([{ role: 'user', content: prompt }], { signal: ctx.signal })
-        ctx.note('summary.zhida.ok', { model: r.model, tokens: r.usage?.totalTokens ?? 0 })
-        return { summary: truncate(r.content, SUMMARY_MAX_LEN), source: 'zhida' }
-      } catch (e) {
-        const isQuota = e instanceof ZhidaError && e.kind === 'quota'
-        zhidaCounters.degraded++
-        log.warn('summary.zhida.degraded', {
-          qid: ctx.qid,
-          kind: e instanceof ZhidaError ? e.kind : 'unknown',
-          isQuota,
-          degradedTotal: zhidaCounters.degraded,
-        })
-        ctx.note('summary.zhida.degraded', { kind: e instanceof ZhidaError ? e.kind : 'unknown' })
+    /* ---------------- 04 综述：刘看山人格（外部 LLM 承载，题级一次） ---------------- */
+    async summarize(answers, judgments, ctx): Promise<SummarizeResult> {
+      // 人设消息（human turn）：样本量 + 判断列表 + 每条光谱分布（slot 各档答主）+ 分歧度。
+      // 只给数据里真实存在的字段 —— 人格铁律「不编造输入之外的事实」以输入为边界。
+      // 答主名/认证/权威度只取输入里出现的，供人格自然引用（铁律 2 允许）。
+      const payload = {
+        sampleCount: answers.length,
+        judgments: judgments.map((j) => ({
+          text: j.text,
+          divergence: j.divergence,
+          distribution: j.distribution.map((d) => ({
+            slot: d.slot,
+            authors: d.authors.map((a) => ({
+              name: a.name,
+              badge: a.badge,
+              authority: a.authority,
+            })),
+          })),
+        })),
       }
 
-      // 降级外部 LLM（providers.yaml 的 summaryFallback）
-      const r2 = await callAgent('summaryFallback', {
+      // provider 层承载（providers.yaml 的 summary agent，primary origami）。
+      // 失败不重试（protect 预算），异常上抛由 pipeline 统一降级（summaryDegradation 可观测）。
+      const r = await callAgent('summary', {
         messages: [
-          {
-            role: 'system',
-            content:
-              '你是「两面」系统的综述 Agent。只描述分歧结构，不评判对错、不站队，输出 80–160 字正文，不要任何前缀。',
-          },
-          { role: 'user', content: prompt },
+          { role: 'system', content: LIUKANSHAN_SYSTEM },
+          { role: 'user', content: JSON.stringify(payload) },
         ],
-        temperature: 0.5,
+        temperature: 0.6, // 人格需要活性，比结构化抽取高，比闲聊低
         signal: ctx.signal,
       })
-      ctx.note('summary.fallback.ok', { tokens: r2.usage?.totalTokens ?? 0 })
-      return { summary: truncate(r2.content, SUMMARY_MAX_LEN), source: 'fallback' }
+      ctx.note('summary.liukanshan.ok', { tokens: r.usage?.totalTokens ?? 0 })
+      return { summary: truncate(r.content, SUMMARY_MAX_LEN), source: 'liukanshan' }
     },
   }
 }
 
 /** 观测计数导出（pipeline:test 打印用） */
-export { zhihuCounters, zhidaCounters, llmCounters }
+export { zhihuCounters, llmCounters }

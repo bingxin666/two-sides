@@ -368,12 +368,12 @@ export function createFakeAgents(opts: FakeAgentsOptions = {}): PipelineAgents {
       return hit ?? null
     },
 
-    async summarize(_answers, ctx): Promise<SummarizeResult> {
+    async summarize(_answers, _judgments, ctx): Promise<SummarizeResult> {
       await step(ctx)
       ctx.report({ stage: 'render', stageRatio: 0.9 })
       return {
         summary: '（D0 fake 综述）两侧都能找到认真作答的人，分歧本身比结论更值得看。',
-        // D0 无直答调用，标注 fallback 来源（前端按来源双态展示）
+        // D0 无真实调用，标注 fallback 来源（前端按来源双态展示）
         source: 'fallback',
       }
     },

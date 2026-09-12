@@ -47,10 +47,14 @@ services:
   # ----------------------------------------------------------
   # API 层：Bun + Hono + SQLite
   #
-  # 每日预生成（cron）方案已拍板（2026-09-12）：**进程内定时器**
-  # （Bun timer 计算下一个 Asia/Shanghai 00:30），单容器零依赖；
-  # 外部 crontab + /internal/pregenerate 整条路线砍掉，故无需 INTERNAL_TOKEN。
-  # 端点未实现前，快照由懒生成路径（GET /analysis 未命中隐式触发）自然填充。
+  # 每日预生成方案（2026-09-12 定稿）：
+  #   · 主路径：进程内定时器（Bun timer 计算下一个 Asia/Shanghai 00:30）
+  #   · 运维手动触发：POST /internal/pregenerate —— **不走 Caddy**，
+  #     可达面仅容器内 + 宿主 localhost；compose 不做任何端口映射，
+  #     「不对外」由网络拓扑保证（server 拍板，2026-09-12）
+  #   · INTERNAL_TOKEN 安全契约（server 实现）：
+  #       值只从 env 来；timing-safe 比较；不匹配 404；
+  #       **未配置时端点整体禁用（404）** —— compose 漏注入会以 404 暴露，绝不静默放行
   # ----------------------------------------------------------
   server:
     build:
@@ -93,6 +97,10 @@ services:
       # SQLite 落在具名 volume 内，容器重建不丢快照
       ZHIDUAN_DB_PATH: /app/data/two-sides.db
       PROVIDERS_CONFIG: /app/config/providers.yaml
+      # ---- 预生成内部口（POST /internal/pregenerate）----
+      # 生成随机串填入 .env；端点在 .env.example 口径若调整以 server 落地版为准。
+      # 留空 = 端点整体禁用（404），不会裸奔。
+      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
       ANALYSIS_RETRY_COOLDOWN_SEC: ${ANALYSIS_RETRY_COOLDOWN_SEC:-60}
       ANALYSIS_JOB_TIMEOUT_SEC: ${ANALYSIS_JOB_TIMEOUT_SEC:-180}
       LLM_RPM_LIMIT: ${LLM_RPM_LIMIT:-60}

@@ -162,20 +162,20 @@ export async function runPipeline(
   }
   note('orient.done', { total: merged.length, ok: judgments.length })
 
-  /* ---------- 04 综述（题级，docs/01 §8 第 7 条：100/日 ÷ 30 题 = 每题 1 次） ---------- */
+  /* ---------- 04 综述（题级，刘看山人格 · 外部 LLM 承载） ---------- */
   ctx.report({ stage: 'render', stageRatio: 0.2, judgmentsTotal: judgments.length })
   let summaryText: string | undefined
-  let summarySource: 'zhida' | 'fallback' | undefined
+  let summarySource: 'liukanshan' | 'zhida' | 'fallback' | undefined
   try {
-    const s = await agents.summarize(answers, ctx)
+    const s = await agents.summarize(answers, judgments, ctx)
     if (s.summary) {
       summaryText = s.summary
       summarySource = s.source ?? 'fallback'
     }
   } catch (e) {
     // ⚠️ 有意偏离 docs/03 §6.1（「直答与回退都失败 → failed」），2026-09-12 team-lead 裁决采纳：
-    // 综述是可选字段，一次失败不该报废整批预生成 —— 直答额度只有 100/日（docs/03 §8.5 最紧的一项），
-    // 若因它把每道题都置 failed，30 题预生成会整批报废、懒生成路径也会被同一条额度拖死。
+    // 综述是可选字段，一次失败不该报废整批预生成 —— 人格解读挂了不该拖死快照
+    //（原直答 100/日 额度瓶颈已随刘看山人格改造消除，此降级现在纯粹是容错）。
     // 降级行为：summary / summarySource 缺省，前端按「无解读」展示（ui 已同步）。
     // 评审期观察降级率：summaryDegradation.count + 下面的结构化日志。
     summaryDegradation.count++
@@ -193,8 +193,9 @@ export async function runPipeline(
     .filter((j) => j.participantCount > 0)
     .map<Judgment>((j) => {
       const { relatedAnswerIds: _drop, ...rest } = j
-      // 04 综述是题级一次调用，产出后拆分挂到每条 judgment.summary（额度：100/日 ÷ 30 题）。
-      // D1 真实直答路径 summarySource 必须标 'zhida'，降级标 'fallback' —— 前端据此双态展示。
+      // 04 综述是题级一次调用，产出后拆分挂到每条 judgment.summary。
+      // 2026-09-12 起 summarySource 为 'liukanshan'（刘看山人格，外部 LLM 承载）；
+      // 'zhida'/'fallback' 仅历史快照兼容保留。
       if (summaryText) {
         return { ...rest, summary: summaryText, summarySource: summarySource ?? 'fallback' }
       }

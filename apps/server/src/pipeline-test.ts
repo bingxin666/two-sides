@@ -139,9 +139,9 @@ const parsed = AnalysisSchema.safeParse(analysis)
 console.log(parsed.success ? '✓ Analysis zod 通过' : `✗ zod: ${parsed.error.issues[0]?.message}`)
 
 console.log('\n===== 额度/调用计数 =====')
-const { zhihuCounters, zhidaCounters, llmCounters } = await import('./agents/llm')
+const { zhihuCounters, llmCounters } = await import('./agents/llm')
 console.log(
-  `zhihu_search: ${zhihuCounters.search} 次 | zhida: ${zhidaCounters.calls} 次(降级 ${zhidaCounters.degraded}) | llm: ${llmCounters.calls} 次 / ${llmCounters.tokens} tokens`,
+  `zhihu_search: ${zhihuCounters.search} 次 | llm: ${llmCounters.calls} 次 / ${llmCounters.tokens} tokens（综述已并入 llm 计数：刘看山人格 · 外部 LLM）`,
 )
 console.log(` judgments=${analysis.judgments.length} sampleCount=${analysis.sampleCount}`)
 

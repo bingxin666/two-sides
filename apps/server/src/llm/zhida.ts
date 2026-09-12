@@ -1,6 +1,11 @@
 /**
  * 知乎直答客户端（docs/03 §8.2 直答行、§8.1 鉴权）
  *
+ * ⚠️ 休眠备用（2026-09-12 起无调用方）：看山解读已改由刘看山人格承载
+ * （agents/llm.ts summarize 走 provider 层 summary agent）。本文件保留不删，
+ * 如需恢复直答路径，走 provider 层重新接线或在此恢复 import。
+ * /health 的 zhida_openai quota 字段仍是知乎侧真实信息，与本体无关。
+ *
  * 与开放平台同一把凭证（ZHIHU_ACCESS_SECRET 做 Bearer），但模型档位与字段约束独立：
  *  - POST https://developer.zhihu.com/v1/chat/completions
  *  - 仅 model / messages / stream 三字段受支持 —— response_format 不在支持字段内，
@@ -8,8 +13,8 @@
  *  - X-Request-Timestamp 必须秒级
  *  - Access Secret 不发送到其他主机（BASE 与开放平台同域）
  *
- * 综述专用，永不挪用（docs/01 §2）。额度 100/日是最紧资源：
- * 30002 → quota_exhausted → 调用方（agents/llm.ts summarize）降级外部 LLM 并打日志。
+ * 历史用途：综述专用，永不挪用（docs/01 §2）。额度 100/日是最紧资源：
+ * 30002 → quota_exhausted → 调用方降级外部 LLM 并打日志。
  */
 
 import { env } from '../env'
