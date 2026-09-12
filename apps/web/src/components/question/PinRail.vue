@@ -12,7 +12,10 @@ const props = withDefaults(defineProps<{ judgments?: Judgment[]; selectedId?: st
   judgments: () => [],
   selectedId: null,
 })
-const emit = defineEmits<{ (e: 'select', id: string): void }>()
+const emit = defineEmits<{
+  (e: 'select', id: string): void
+  (e: 'pan', offset: number): void
+}>()
 
 const list = computed(() => props.judgments ?? [])
 const railEl = ref<HTMLElement | null>(null)
@@ -25,6 +28,7 @@ function syncArrows() {
   if (!el) return
   canScrollLeft.value = el.scrollLeft > 4
   canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+  emit('pan', el.scrollLeft)
 }
 
 function scrollByPage(direction: number) {

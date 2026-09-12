@@ -10,7 +10,10 @@
  */
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 
-const props = withDefaults(defineProps<{ height?: number }>(), { height: 600 })
+const props = withDefaults(defineProps<{ height?: number; panX?: number }>(), {
+  height: 600,
+  panX: 0,
+})
 
 const root = ref<HTMLElement | null>(null)
 const strip = ref(0)
@@ -45,7 +48,10 @@ onBeforeUnmount(() => {
 })
 
 const style = computed<Record<string, string>>(() => {
-  const s: Record<string, string> = { height: `${props.height}px` }
+  const s: Record<string, string> = {
+    height: `${props.height}px`,
+    '--pan-x': `${props.panX}px`,
+  }
   if (strip.value > 0) s['--strip'] = `${strip.value}px`
   return s
 })
@@ -80,9 +86,12 @@ const style = computed<Record<string, string>>(() => {
 /* 层 1 · 光谱底：两端全饱和、中间消饱和 */
 .veil__base {
   position: absolute;
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: max(100%, calc(100% + 1600px));
   opacity: .72;
   filter: saturate(1.08) contrast(.96);
+  transform: translate3d(calc(var(--pan-x, 0px) * -.32), 0, 0);
+  transition: transform .42s cubic-bezier(.22, .61, .36, 1);
   background: linear-gradient(90deg,
       #3C6B8A 0%, #5B7A8D 12.5%, #7A8A90 25%, #979D9A 37.5%,
       #B4B0A5 50%, #B8A585 62.5%, #BC9A67 75%, #B08750 87.5%, #A57439 100%);
@@ -92,8 +101,11 @@ const style = computed<Record<string, string>>(() => {
 .veil__cut,
 .veil__gloss {
   position: absolute;
-  inset: 0;
+  inset: 0 auto 0 0;
+  width: max(100%, calc(100% + 1600px));
   pointer-events: none;
+  transform: translate3d(calc(var(--pan-x, 0px) * -.32), 0, 0);
+  transition: transform .42s cubic-bezier(.22, .61, .36, 1);
 }
 
 .veil__cut {

@@ -4,7 +4,7 @@
  *   200 → N2 钉子列表；202 generating/pending → T1；202 failed → 失败卡片
  * 刷新用 URL query ?j=<judgmentId> 恢复选中判断
  */
-import { computed, onMounted, onUnmounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAnalysisStore } from '@/stores/analysis'
@@ -18,6 +18,7 @@ const route = useRoute()
 const router = useRouter()
 const store = useAnalysisStore()
 const { phase, analysis, progress, error, selectedJudgmentId } = storeToRefs(store)
+const veilPanX = ref(0)
 
 const qid = computed(() => String(route.params.qid ?? ''))
 const jFromQuery = computed(() => (typeof route.query.j === 'string' ? route.query.j : null))
@@ -76,6 +77,10 @@ function onSelect(id: string) {
   const next = selectedJudgmentId.value === id ? null : id
   store.select(next)
   syncQuery(next)
+}
+
+function onPan(offset: number) {
+  veilPanX.value = offset
 }
 
 function onClose() {
@@ -143,13 +148,14 @@ watch(
       </p>
     </header>
 
-    <VeilGlass :height="veilHeight">
+    <VeilGlass :height="veilHeight" :pan-x="veilPanX">
       <!-- 判断以横向轨道呈现；选中后在下方显示对应详情 -->
       <PinRail
         v-if="analysis && !isGenerating"
         :judgments="analysis.judgments"
         :selected-id="selectedJudgmentId"
         @select="onSelect"
+        @pan="onPan"
       />
       <!-- T1：光谱生成中 = 光幕从左向右被揭示（设计稿 RevealMask 盖在光幕上） -->
       <div
