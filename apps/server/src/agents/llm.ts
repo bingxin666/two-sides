@@ -642,21 +642,24 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       for (const merged of modelMerged) {
         // 相同的短句可能出现在多个回答中；只有唯一命中，或 answerIds
         // 能把命中范围缩到唯一回答时，sourceQuote 才能建立可靠归属。
-        const quoteLinkedIds = new Set<string>()
+        const quoteLinkedKeys = new Set<string>()
         for (const quote of merged.sourceQuotes) {
           const matches = items.filter((item) => quoteMatchesExtracted(quote, item.quote))
           const constrained = merged.answerIds.length > 0
             ? matches.filter((item) => merged.answerIds.includes(item.answerId))
             : matches
           const candidates = constrained.length > 0 ? constrained : matches
-          if (candidates.length === 1) quoteLinkedIds.add(candidates[0]!.answerId)
+          if (candidates.length === 1) {
+            const item = candidates[0]!
+            quoteLinkedKeys.add(`${item.answerId}\u0000${item.text}`)
+          }
         }
         for (const item of items) {
           // sourceQuotes 是判断级别的精确归属；仅有 answerId 时，如果一条
           // 回答拆出了多个判断，不能把它们全部标成已覆盖，否则模型漏掉的
           // 第二个主张仍会被静默吞掉。只有该答主尚未被本结果覆盖时，
           // answerId 才足以建立一个保守归属。
-          const quoteLinked = quoteLinkedIds.has(item.answerId)
+          const quoteLinked = quoteLinkedKeys.has(`${item.answerId}\u0000${item.text}`)
           // 若模型只给 answerId 而没有 sourceQuotes，只能保守地把该答主
           // 的一个判断视为已覆盖；其余同答主判断会进入 orphanFallbacks，
           // 避免一条归并结果误标掉整篇回答的多个独立主张。
