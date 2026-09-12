@@ -350,6 +350,19 @@ function quoteLocatable(quote: string, content: string): boolean {
   return head.length >= 6 && body.includes(head)
 }
 
+/**
+ * 归并模型有时只回传 sourceQuotes、漏掉 answerIds。用提取阶段保存的原话
+ * 做一次保守反查，补齐来源归属；同一个 answerId 可被多个判断共同引用。
+ */
+function quoteMatchesExtracted(quote: string, extractedQuote: string): boolean {
+  const a = quote.replace(/\s+/g, '').trim()
+  const b = extractedQuote.replace(/\s+/g, '').trim()
+  if (!a || !b) return false
+  if (a === b || a.includes(b) || b.includes(a)) return true
+  const head = a.slice(0, 12)
+  return head.length >= 6 && b.includes(head)
+}
+
 /* ---------------------------- 02 归并 Agent ---------------------------- */
 
 const MergeOut = z.object({
@@ -601,8 +614,14 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       const known = new Set(items.map((i) => i.answerId))
       const out2: MergedJudgment[] = (out.judgments ?? [])
         .map((j, i) => {
-          // answerIds 只认输入里出现过的 id，防编造；全被滤掉时退化为空（orient 阶段仍可定位）
-          const ids = [...new Set((j.answerIds ?? []).filter((id) => known.has(id)))]
+          // answerIds 只认输入里出现过的 id，防编造；模型漏填时从 sourceQuotes 反查补齐。
+          const explicitIds = (j.answerIds ?? []).filter((id) => known.has(id))
+          const inferredIds = (j.sourceQuotes ?? []).flatMap((sourceQuote) =>
+            items
+              .filter((item) => quoteMatchesExtracted(sourceQuote, item.quote))
+              .map((item) => item.answerId),
+          )
+          const ids = [...new Set([...explicitIds, ...inferredIds])]
           return {
             id: `j${i + 1}`,
             text: j.text,
