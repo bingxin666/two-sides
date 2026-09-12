@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
- * 钉子（docs/02 §3.3）：宽 300 · 首个 x=48 · 间距 14
- * PinStem 宽 12（胶囊头 11×22 + 2px 竖线）；PinContent 上内边距 40、右内边距 14
+ * 钉子（设计稿 N2/N3）：宽 300，钉在光幕上——高度撑满光幕（600 ⇄ 300 随展开态）
+ * PinStem 宽 12（胶囊头 11×22 于 y3 + 2px 竖线到底）；PinContent 上内边距 40、右内边距 14
  * 计数文案：N 人表态 = participantCount（人数），不是 sampleCount（条数）
  */
 import { computed } from 'vue'
@@ -46,18 +46,21 @@ const divergenceText = computed(() => DIVERGENCE_LABEL[props.judgment.divergence
   position: relative;
   flex: 0 0 auto;
   width: 300px;
+  height: 100%;
   padding: 40px 14px 18px 24px;
   border-radius: 10px;
   text-align: left;
   transition: background .2s ease;
 }
 
+/* 玻璃上的 hover 是提亮；选中是压暗（设计稿 N3：黑 5%），两种方向不混 */
 .pin:hover {
-  background: rgba(242, 240, 234, .6);
+  background: rgba(255, 255, 255, .45);
 }
 
-.pin--on {
-  background: var(--tag-bg);
+.pin--on,
+.pin--on:hover {
+  background: rgba(28, 27, 25, .05);
 }
 
 .pin__stem {
@@ -69,9 +72,11 @@ const divergenceText = computed(() => DIVERGENCE_LABEL[props.judgment.divergence
   display: flex;
   flex-direction: column;
   align-items: center;
+  padding-top: 3px;
 }
 
 .pin__capsule {
+  flex: 0 0 auto;
   width: 11px;
   height: 22px;
   border-radius: 5.5px;
@@ -82,7 +87,7 @@ const divergenceText = computed(() => DIVERGENCE_LABEL[props.judgment.divergence
   flex: 1 1 auto;
   width: 2px;
   min-height: 16px;
-  margin-top: 4px;
+  margin-top: -1px;
   background: var(--ink-deep);
 }
 
@@ -92,20 +97,16 @@ const divergenceText = computed(() => DIVERGENCE_LABEL[props.judgment.divergence
   font-weight: 500;
   font-size: 17px;
   line-height: 27px;
-  color: var(--ink);
+  color: var(--ink-deep);
 }
 
 .pin__meta {
   display: block;
-  margin-top: 10px;
+  margin-top: 8px;
   font-family: var(--font-sans);
   font-weight: 500;
   font-size: 12px;
   line-height: 18px;
-  color: var(--muted);
-}
-
-.pin__count {
   color: var(--ink-soft);
 }
 

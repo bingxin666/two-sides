@@ -37,7 +37,7 @@ const props = withDefaults(
 
 <style scoped>
 .quote {
-  padding: 18px 20px;
+  padding: 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-card);
   background: var(--quote-bg);

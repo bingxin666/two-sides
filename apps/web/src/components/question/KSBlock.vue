@@ -129,7 +129,7 @@ const hasBody = computed(() => (props.summary ?? '').trim().length > 0)
   font-family: var(--font-body);
   font-size: 13px;
   line-height: 22px;
-  color: var(--ink-soft);
+  color: var(--ink-mid);
   transition: opacity .2s ease;
 }
 

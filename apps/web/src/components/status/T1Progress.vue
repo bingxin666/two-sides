@@ -1,7 +1,8 @@
 <script setup lang="ts">
 /**
- * T1 生成中（docs/02 §6.2）：四阶段进度 + RevealMask
- * 进度只读 GET /analysis 的 202 响应（stage + stageRatio），没有独立 progress 端点
+ * T1 生成中（docs/02 §6.2）：四阶段进度；RevealMask 由 QuestionPage 盖在光幕上
+ * （设计稿 T1：光谱生成中 = 光幕从左向右被揭示），本组件只留文案 / 阶段 / 取消 / 看山。
+ * 进度只读 GET /analysis 的 202 响应（stage + stageRatio），没有独立 progress 端点。
  * 看山动图（fox-t1，看山操作电脑 = 正在分析）：仅本组件挂载时加载/播放，
  * 进 N2 / 失败态即随组件卸载释放；180px 源展示 140px，禁进首屏（T1 是生成态非首屏）
  */
@@ -24,11 +25,6 @@ const stageIndex = computed(() => {
   const idx = STAGES.findIndex((s) => s.key === props.progress?.stage)
   return idx < 0 ? 0 : idx
 })
-
-const stageRatio = computed(() => Math.min(1, Math.max(0, props.progress?.stageRatio ?? 0)))
-
-/** 总进度 0..1：四阶段均分 + 当前阶段内部推进比 */
-const total = computed(() => Math.min(1, (stageIndex.value + stageRatio.value) / STAGES.length))
 
 const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
 </script>
@@ -71,15 +67,11 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
         decoding="async"
       />
     </div>
-
-    <div class="t1__mask" :style="{ width: `${(1 - total) * 100}%` }" aria-hidden="true" />
   </section>
 </template>
 
 <style scoped>
 .t1 {
-  position: relative;
-  overflow: hidden;
   padding: 4px 0 8px;
 }
 
@@ -94,7 +86,7 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
   min-width: 0;
 }
 
-/* 看山操作电脑：随 RevealMask 一起被揭示（mask 覆盖整个 .t1，图在最右、最后显现） */
+/* 看山操作电脑：陪跑生成过程，进 N2 / 失败态即随组件卸载释放 */
 .t1__fox {
   flex: 0 0 auto;
   width: 140px;
@@ -154,17 +146,6 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
 
 .t1__cancel:hover {
   color: var(--ink);
-}
-
-/* 右侧白 → 左侧透明，宽度随总进度收窄 */
-.t1__mask {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  background: linear-gradient(270deg, #FFF 0%, #FFF 55%, rgba(255, 255, 255, 0) 100%);
-  pointer-events: none;
-  transition: width .4s linear;
 }
 
 @media (max-width: 1024px) {

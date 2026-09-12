@@ -55,6 +55,15 @@ const mergedTitles = computed(() =>
 
 const veilHeight = computed(() => (selectedJudgment.value ? 300 : 600))
 
+/** T1 总进度 0..1：四阶段均分 + 当前阶段内部推进比（驱动光幕上的 RevealMask） */
+const STAGE_ORDER = ['extract', 'merge', 'orient', 'render']
+const genTotal = computed(() => {
+  const p = progress.value
+  const idx = Math.max(0, STAGE_ORDER.indexOf(p?.stage ?? 'extract'))
+  const ratio = Math.min(1, Math.max(0, p?.stageRatio ?? 0))
+  return Math.min(1, (idx + ratio) / STAGE_ORDER.length)
+})
+
 function syncQuery(id: string | null) {
   const query = { ...route.query }
   if (id) query.j = id
@@ -133,19 +142,27 @@ watch(
       </p>
     </header>
 
-    <VeilGlass :height="veilHeight" />
-
-    <div class="qbody">
-      <T1Progress v-if="isGenerating" :progress="progress" @cancel="onCancel" />
-
-      <FailedCard v-else-if="phase === 'failed'" :error="error" @retry="onRetry" @back="goHome" />
-
+    <VeilGlass :height="veilHeight">
+      <!-- 钉子钉在光幕上（设计稿 N2/N3）：ready 后渲染进光幕插槽，随 600 ⇄ 300 收放 -->
       <PinRail
-        v-else-if="analysis"
+        v-if="analysis && !isGenerating"
         :judgments="analysis.judgments"
         :selected-id="selectedJudgmentId"
         @select="onSelect"
       />
+      <!-- T1：光谱生成中 = 光幕从左向右被揭示（设计稿 RevealMask 盖在光幕上） -->
+      <div
+        v-else-if="isGenerating"
+        class="qveil__mask"
+        :style="{ width: `${(1 - genTotal) * 100}%` }"
+        aria-hidden="true"
+      />
+    </VeilGlass>
+
+    <div v-if="isGenerating || phase === 'failed' || !analysis" class="qbody">
+      <T1Progress v-if="isGenerating" :progress="progress" @cancel="onCancel" />
+
+      <FailedCard v-else-if="phase === 'failed'" :error="error" @retry="onRetry" @back="goHome" />
 
       <p v-else-if="phase === 'ready'" class="qbody__empty">这个问题今天还没有可用的判断</p>
     </div>
@@ -171,12 +188,24 @@ watch(
 
 .qhead__back {
   font-family: var(--font-sans);
-  font-size: 12px;
+  font-weight: 500;
+  font-size: 13px;
   color: var(--muted);
 }
 
 .qhead__back:hover {
   color: var(--ink);
+}
+
+/* T1 揭示遮罩：右侧白 → 左侧透明，宽度随总进度收窄，盖在光幕上 */
+.qveil__mask {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  background: linear-gradient(270deg, #FFF 0%, rgba(255, 255, 255, .85) 55%, rgba(255, 255, 255, 0) 100%);
+  pointer-events: none;
+  transition: width .4s linear;
 }
 
 .qhead__title {

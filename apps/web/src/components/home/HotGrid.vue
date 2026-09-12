@@ -107,7 +107,7 @@ onBeforeUnmount(() => {
       <div class="hot-grid__foot">
         <div class="scroll-hint">
           <span class="scroll-hint__arrow">←</span>
-          <span>横向浏览今日热榜</span>
+          <span>横向自动滚动 · 慢速 · 共 {{ (items ?? []).length }} 条热榜问题</span>
           <span class="scroll-hint__arrow">→</span>
         </div>
         <div class="progress" :style="{ width: `${TRACK_W}px` }">
