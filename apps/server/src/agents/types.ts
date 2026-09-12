@@ -54,6 +54,8 @@ export interface MergedJudgment {
   answerIds: string[]
   /** 同一议题下模型识别出的立场派系，供取向阶段生成多峰分布；不出库 */
   factionHints?: string[]
+  /** 每个派系对应的来源，供取向阶段按派系保留多峰；不出库 */
+  factionGroups?: Array<{ label: string; answerIds: string[]; sourceQuotes: string[] }>
   /** 相关回答下提出不同看法的精选评论条数（独立字段，不进分布） */
   commentChallengeCount?: number
 }

@@ -389,6 +389,7 @@ export interface MergeCandidate {
   sourceQuotes?: string[]
   answerIds?: string[]
   factionHints?: string[]
+  factionGroups?: Array<{ label: string; answerIds?: string[]; sourceQuotes?: string[] }>
 }
 
 export function normalizeMergedJudgments(
@@ -417,6 +418,11 @@ export function normalizeMergedJudgments(
         sourceQuotes,
         answerIds: [...new Set([...explicitIds, ...inferredIds])],
         factionHints: (j.factionHints ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 6),
+        factionGroups: (j.factionGroups ?? []).map((g) => ({
+          label: g.label.trim(),
+          answerIds: [...new Set((g.answerIds ?? []).filter((id) => known.has(id)))],
+          sourceQuotes: (g.sourceQuotes ?? []).filter((q) => items.some((item) => quoteMatchesExtracted(q, item.quote))).slice(0, 6),
+        })).filter((g) => g.label && (g.answerIds.length > 0 || g.sourceQuotes.length > 0)).slice(0, 6),
       }
     })
     .filter((j) => j.answerIds.length > 0 || j.sourceQuotes.some((quote) =>
@@ -479,6 +485,11 @@ const MergeOut = z.object({
         answerIds: z.array(z.string().min(1)).max(20).default([]),
         /** 同一议题下真实存在的 2–4 个立场家族，供取向阶段保留多峰 */
         factionHints: z.array(z.string().min(2).max(60)).max(6).default([]),
+        factionGroups: z.array(z.object({
+          label: z.string().min(2).max(60),
+          answerIds: z.array(z.string().min(1)).max(20).default([]),
+          sourceQuotes: z.array(z.string().min(2).max(300)).max(12).default([]),
+        })).max(6).default([]),
       }),
     )
     // 上限放宽到 60（实测模型合并后仍可能超过 16）；服务端按契约裁到 15
@@ -491,10 +502,10 @@ const MERGE_SYSTEM = [
   '1. 先按 topic 识别共同讨论的命题，输出的 text 要是一个中性、具体、可被多方回答的命题，而不是某一派的结论。',
   '2. 同一命题下的赞成、反对、条件赞成、风险保留、前提质疑，都合并到同一个 judgment；把它们作为不同 faction 交给 03 取向，保留多峰分布。相反结论本身不是拆分理由。',
   '3. 只有对象、人群、前提条件、时间范围、因果链或价值权衡发生变化，才拆成不同 judgment。不要把“AI 应该强制标注”和“不需要强制标注”拆开，它们属于同一命题的两端。',
-  '4. 禁止用“要综合看”“各有道理”这类宽泛上位句吞掉细分分歧；factionHints 写出该命题下从原话中确认的 2–4 个立场家族，不要凭空制造派系。',
+  '4. 禁止用“要综合看”“各有道理”这类宽泛上位句吞掉细分分歧；factionHints 写出该命题下从原话中确认的 2–4 个立场家族，并用 factionGroups 把每个派系对应到 answerIds/sourceQuotes，不要凭空制造派系。',
   '5. 合并时保留全部来源：answerIds 必须是被合并判断的原 answerId，sourceQuotes 从被合并判断的 quote 里取。一个 answerId 可以同时参与多个不同 judgment，但同一命题的不同 faction 应留在同一 judgment。',
   '6. 不做立场裁决、不改写含义、不丢弃少数派表述；最终最多 15 条，优先覆盖不同命题，并确保每个命题的主要派系都有来源。',
-  '输出 JSON：{"judgments":[{"text":"具体判断","factionHints":["派系A","派系B"],"sourceQuotes":["原话"],"answerIds":["回答id"]}]}。',
+  '输出 JSON：{"judgments":[{"text":"具体判断","factionHints":["派系A","派系B"],"factionGroups":[{"label":"派系A","answerIds":["回答id"],"sourceQuotes":["原话"]}],"sourceQuotes":["原话"],"answerIds":["回答id"]}]}。',
 ].join('\n')
 
 /* ---------------------------- 03 取向 Agent ---------------------------- */
@@ -750,6 +761,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       const payload = {
         judgment: judgment.text,
         factions: judgment.factionHints ?? [],
+        factionGroups: judgment.factionGroups ?? [],
         answers: pool.map((a) => ({
           answerId: a.answerId,
           content: truncate(a.content, contentLimit),
