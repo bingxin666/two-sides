@@ -68,6 +68,10 @@ function num(name: string, def: number): number {
   return Number.isFinite(n) && n >= 0 ? n : def
 }
 
+function positiveNum(name: string, def: number): number {
+  return Math.max(1, num(name, def))
+}
+
 function bool(name: string, def: boolean): boolean {
   const raw = process.env[name]
   if (raw === undefined || raw === '') return def
@@ -101,10 +105,10 @@ export const env = {
   /** 全局 LLM 令牌桶上限；并发由各阶段信号量控制，令牌桶负责总吞吐 */
   LLM_RPM_LIMIT: num('LLM_RPM_LIMIT', 300),
   /** 单题提取/取向并发；生产可按供应商承载调节 */
-  PIPELINE_EXTRACT_CONCURRENCY: num('PIPELINE_EXTRACT_CONCURRENCY', 8),
-  PIPELINE_ORIENT_CONCURRENCY: num('PIPELINE_ORIENT_CONCURRENCY', 12),
+  PIPELINE_EXTRACT_CONCURRENCY: positiveNum('PIPELINE_EXTRACT_CONCURRENCY', 8),
+  PIPELINE_ORIENT_CONCURRENCY: positiveNum('PIPELINE_ORIENT_CONCURRENCY', 12),
   /** 预生成跨题并发；搜索与 LLM 仍受各自限流约束 */
-  PREGENERATE_CONCURRENCY: num('PREGENERATE_CONCURRENCY', 4),
+  PREGENERATE_CONCURRENCY: positiveNum('PREGENERATE_CONCURRENCY', 4),
 
   /**
    * 是否允许真实知乎调用。默认 false —— D0 绝不能消耗黑客松日额度。
