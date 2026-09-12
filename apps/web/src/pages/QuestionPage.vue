@@ -10,7 +10,6 @@ import { storeToRefs } from 'pinia'
 import { useAnalysisStore } from '@/stores/analysis'
 import VeilGlass from '@/components/veil/VeilGlass.vue'
 import PinRail from '@/components/question/PinRail.vue'
-import ExpandedPanel from '@/components/question/ExpandedPanel.vue'
 import T1Progress from '@/components/status/T1Progress.vue'
 import FailedCard from '@/components/status/FailedCard.vue'
 
@@ -37,10 +36,6 @@ const title = computed(() => {
   return '正在获取问题…'
 })
 
-const selectedJudgment = computed(
-  () => analysis.value?.judgments.find((j) => j.id === selectedJudgmentId.value) ?? null,
-)
-
 /**
  * 薄样本救援合并的透明标注（契约 mergedQuestions，optional 防御）：
  * sampleCount 含合并样本，声明行必须同步说明；hover 列出来源提问，避免静默合并
@@ -52,8 +47,6 @@ const mergedTitles = computed(() =>
     .map((m) => `· ${m.title}（${m.reason === 'same_title' ? '同题重定向' : '相关提问'}）`)
     .join('\n'),
 )
-
-const veilHeight = computed(() => (selectedJudgment.value ? 300 : 600))
 
 /** T1 总进度 0..1：四阶段均分 + 当前阶段内部推进比（驱动光幕上的 RevealMask） */
 const STAGE_ORDER = ['extract', 'merge', 'orient', 'render']
@@ -75,11 +68,6 @@ function onSelect(id: string) {
   const next = selectedJudgmentId.value === id ? null : id
   store.select(next)
   syncQuery(next)
-}
-
-function onClose() {
-  store.select(null)
-  syncQuery(null)
 }
 
 function goHome() {
@@ -142,8 +130,8 @@ watch(
       </p>
     </header>
 
-    <VeilGlass :height="veilHeight">
-      <!-- 钉子钉在光幕上（设计稿 N2/N3）：ready 后渲染进光幕插槽，随 600 ⇄ 300 收放 -->
+    <VeilGlass :height="600">
+      <!-- 判断以横向轨道呈现；详情不再展开到光幕下方 -->
       <PinRail
         v-if="analysis && !isGenerating"
         :judgments="analysis.judgments"
@@ -167,12 +155,6 @@ watch(
       <p v-else-if="phase === 'ready'" class="qbody__empty">这个问题今天还没有可用的判断</p>
     </div>
 
-    <ExpandedPanel
-      v-if="selectedJudgment"
-      :key="selectedJudgment.id"
-      :judgment="selectedJudgment"
-      @close="onClose"
-    />
   </div>
 </template>
 

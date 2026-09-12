@@ -2,10 +2,9 @@
 /**
  * 钉子轨道（设计稿 N2/N3）：钉子钉在光幕上——本组件是光幕覆盖层（absolute inset-0），
  * 渲染在 VeilGlass 插槽里，随光幕 600 ⇄ 300 一起收放。
- * 首屏 4 钉（x=48 起、钉距 24）；「还有 N 条」浮在光幕右上（top 136 · right 48），
- * 点击展开全部横向滑动查看，再点收起。接口一次给全、前端控制显隐。
+ * 所有钉子在同一条横向轨道中；左右边缘是隐形热区，鼠标靠近时才显出导航按钮。
  */
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import type { Judgment } from '@two-sides/contract'
 import Pin from './Pin.vue'
 
@@ -15,19 +14,34 @@ const props = withDefaults(defineProps<{ judgments?: Judgment[]; selectedId?: st
 })
 const emit = defineEmits<{ (e: 'select', id: string): void }>()
 
-const FIRST_SCREEN = 4
-const showAll = ref(false)
-
 const list = computed(() => props.judgments ?? [])
-const visible = computed(() => (showAll.value ? list.value : list.value.slice(0, FIRST_SCREEN)))
-const rest = computed(() => Math.max(0, list.value.length - FIRST_SCREEN))
+const railEl = ref<HTMLElement | null>(null)
+const canScrollLeft = ref(false)
+const canScrollRight = ref(false)
+const edgeHover = ref<'left' | 'right' | null>(null)
+
+function syncArrows() {
+  const el = railEl.value
+  if (!el) return
+  canScrollLeft.value = el.scrollLeft > 4
+  canScrollRight.value = el.scrollLeft + el.clientWidth < el.scrollWidth - 4
+}
+
+function scrollByPage(direction: number) {
+  const el = railEl.value
+  if (!el) return
+  el.scrollBy({ left: direction * Math.max(240, el.clientWidth * 0.72), behavior: 'smooth' })
+  window.setTimeout(syncArrows, 320)
+}
+
+onMounted(syncArrows)
 </script>
 
 <template>
-  <div class="pin-rail">
-    <div v-if="list.length > 0" class="pin-rail__list" :class="{ 'pin-rail__list--all': showAll }">
+  <div class="pin-rail" @mouseenter="syncArrows">
+    <div v-if="list.length > 0" ref="railEl" class="pin-rail__list" @scroll="syncArrows">
       <Pin
-        v-for="j in visible"
+        v-for="j in list"
         :key="j.id"
         :judgment="j"
         :selected="j.id === selectedId"
@@ -36,25 +50,34 @@ const rest = computed(() => Math.max(0, list.value.length - FIRST_SCREEN))
     </div>
     <p v-else class="pin-rail__empty">这个问题今天还没有可用的判断</p>
 
-    <button
-      v-if="rest > 0"
-      type="button"
-      class="pin-rail__more"
-      @click="showAll = !showAll"
+    <div
+      v-if="canScrollLeft"
+      class="pin-rail__edge pin-rail__edge--left"
+      @mouseenter="edgeHover = 'left'"
+      @mouseleave="edgeHover = null"
     >
-      <span>{{ showAll ? '收起' : `还有 ${rest} 条` }}</span>
-      <svg
-        class="pin-rail__more-icon"
-        :class="{ 'pin-rail__more-icon--up': showAll }"
-        width="12"
-        height="12"
-        viewBox="0 0 12 12"
-        aria-hidden="true"
-      >
-        <path d="M3 4.5 L6 7.5 L9 4.5" fill="none" stroke="currentColor" stroke-width="1.2"
-          stroke-linecap="round" stroke-linejoin="round" />
-      </svg>
-    </button>
+      <button
+        type="button"
+        class="pin-rail__arrow"
+        :class="{ 'pin-rail__arrow--visible': edgeHover === 'left' }"
+        aria-label="向左查看更多判断"
+        @click="scrollByPage(-1)"
+      >←</button>
+    </div>
+    <div
+      v-if="canScrollRight"
+      class="pin-rail__edge pin-rail__edge--right"
+      @mouseenter="edgeHover = 'right'"
+      @mouseleave="edgeHover = null"
+    >
+      <button
+        type="button"
+        class="pin-rail__arrow"
+        :class="{ 'pin-rail__arrow--visible': edgeHover === 'right' }"
+        aria-label="向右查看更多判断"
+        @click="scrollByPage(1)"
+      >→</button>
+    </div>
   </div>
 </template>
 
@@ -62,6 +85,7 @@ const rest = computed(() => Math.max(0, list.value.length - FIRST_SCREEN))
 .pin-rail {
   position: absolute;
   inset: 0;
+  --rail-pad: var(--page-pad);
 }
 
 .pin-rail__list {
@@ -69,13 +93,10 @@ const rest = computed(() => Math.max(0, list.value.length - FIRST_SCREEN))
   align-items: stretch;
   gap: 24px;
   height: 100%;
-  padding: 0 var(--page-pad);
-  overflow: hidden;
-}
-
-/* 展开全部后横向滑动查看；滚动条收敛，不破坏「一整块玻璃」 */
-.pin-rail__list--all {
+  padding: 0 var(--rail-pad);
   overflow-x: auto;
+  scroll-behavior: smooth;
+  overscroll-behavior-x: contain;
   scrollbar-width: none;
 }
 
@@ -83,33 +104,58 @@ const rest = computed(() => Math.max(0, list.value.length - FIRST_SCREEN))
   display: none;
 }
 
-/* 「还有 N 条」：浮在光幕右上（设计稿 x≈1348 y=136），不是列表下方的文字链 */
-.pin-rail__more {
+/* 细长的玻璃导航片：按钮本身保持透明，让后面的光幕继续可见。 */
+.pin-rail__arrow {
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 104px;
+  border: 1px solid rgba(255, 255, 255, .48);
+  border-radius: 14px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, .28), rgba(255, 255, 255, .12));
+  -webkit-backdrop-filter: blur(10px) saturate(1.15);
+  backdrop-filter: blur(10px) saturate(1.15);
+  box-shadow: inset 0 0 0 1px rgba(28, 27, 25, .06), 0 8px 22px rgba(28, 27, 25, .10);
+  opacity: 0;
+  transform: scale(.92);
+  pointer-events: none;
+  font-size: 22px;
+  line-height: 1;
+  font-weight: 300;
+  color: rgba(28, 27, 25, .72);
+  transition: opacity .18s ease, background .2s ease, transform .18s ease;
+}
+
+.pin-rail__edge {
   position: absolute;
-  top: 136px;
-  right: var(--page-pad);
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  font-family: var(--font-sans);
-  font-weight: 500;
-  font-size: 12px;
-  line-height: 18px;
-  color: var(--ink);
-  transition: color .2s ease;
+  top: 0;
+  bottom: 0;
+  z-index: 2;
+  width: 88px;
+  display: grid;
+  place-items: center;
 }
 
-.pin-rail__more:hover {
-  color: var(--ink-deep);
+.pin-rail__edge--left {
+  left: 0;
+  background: linear-gradient(90deg, rgba(255,255,255,.26), transparent);
 }
 
-.pin-rail__more-icon {
-  color: var(--ink-deep);
-  transition: transform .2s ease;
+.pin-rail__edge--right {
+  right: 0;
+  background: linear-gradient(270deg, rgba(255,255,255,.26), transparent);
 }
 
-.pin-rail__more-icon--up {
-  transform: rotate(180deg);
+.pin-rail__arrow--visible {
+  opacity: 1;
+  transform: scale(1);
+  pointer-events: auto;
+}
+
+.pin-rail__arrow:hover {
+  background: linear-gradient(180deg, rgba(255, 255, 255, .44), rgba(255, 255, 255, .2));
+  transform: scale(1.05);
 }
 
 .pin-rail__empty {
@@ -132,8 +178,13 @@ const rest = computed(() => Math.max(0, list.value.length - FIRST_SCREEN))
     display: none;
   }
 
-  .pin-rail__more {
-    right: 24px;
+  .pin-rail__edge {
+    width: 72px;
+  }
+
+  .pin-rail__arrow {
+    width: 26px;
+    height: 84px;
   }
 }
 </style>
