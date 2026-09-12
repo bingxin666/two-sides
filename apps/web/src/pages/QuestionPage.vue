@@ -1,8 +1,8 @@
 <script setup lang="ts">
 /**
  * 问题页（docs/02 §2）：一个端点决定一切
- *   200 → N2 钉子列表；202 generating/pending → T1；202 failed → 失败卡片；展开 → N3（同路由）
- * 刷新用 URL query ?j=<judgmentId> 恢复展开态
+ *   200 → N2 钉子列表；202 generating/pending → T1；202 failed → 失败卡片
+ * 刷新用 URL query ?j=<judgmentId> 恢复选中判断
  */
 import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
@@ -102,7 +102,7 @@ watch(qid, (id, prev) => {
   void store.load(id, titleFromQuery.value ? { title: titleFromQuery.value } : undefined)
 })
 
-// ?j= 恢复展开态
+// ?j= 恢复选中判断
 watch(
   [analysis, jFromQuery],
   () => {
