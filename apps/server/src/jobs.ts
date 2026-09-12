@@ -37,6 +37,7 @@ import {
   type ProgressPatch,
 } from './repo'
 import { parseIso, shiftDateKey, todayKey } from './time'
+import { resolveQuestionTitle } from './zhihu/title'
 import type { PipelineContext } from './agents/types'
 import { PipelineError } from './agents/types'
 
@@ -124,11 +125,11 @@ export function tryAcquire(date: string, qid: string, opts: AcquireOptions = {})
 }
 
 /** 启动 runner（fire-and-forget）。内部保证任何异常都被收敛成终态。 */
-export function startRunner(date: string, qid: string, job: JobRow): void {
-  void runJob(date, qid, job)
+export function startRunner(date: string, qid: string, job: JobRow, titleHint?: string): void {
+  void runJob(date, qid, job, titleHint)
 }
 
-async function runJob(date: string, qid: string, job: JobRow): Promise<void> {
+async function runJob(date: string, qid: string, job: JobRow, titleHint?: string): Promise<void> {
   const k = jobKey(date, qid)
   const controller = new AbortController()
   running.set(k, controller)
@@ -162,6 +163,7 @@ async function runJob(date: string, qid: string, job: JobRow): Promise<void> {
   const ctx: PipelineContext = {
     qid,
     date,
+    titleHint,
     signal: controller.signal,
     report(p) {
       progress = { ...progress, ...p }
@@ -173,6 +175,21 @@ async function runJob(date: string, qid: string, job: JobRow): Promise<void> {
   }
 
   try {
+    // 快失败闸门（2026-09-12 产品决策：产品输入只有「问题文字」，qid 不做任何反查）。
+    // llm 模式下无 titleHint 且 question_titles 缓存未命中 → 不跑管线、不碰任何
+    // 网络，直接终态 failed（fake 模式为开发确定性，不走此闸门）。
+    if (env.PIPELINE_MODE === 'llm' && !resolveQuestionTitle(qid, titleHint)) {
+      log.info('job.title.miss', { qid, date, jobId: job.id })
+      fail(job, job.attempts, {
+        code: 'zhihu_error',
+        message: ERROR_COPY.zhihu_error.message,
+        stage: 'extract',
+        retryable: true,
+        detail: [{ event: 'title.miss', t: new Date().toISOString() }],
+      })
+      return
+    }
+
     setAnalysisStatus(date, qid, 'generating', job.attempts)
     setJobStatus(job.id, date, qid, 'generating')
     log.info('job.start', { qid, date, jobId: job.id, attempts: job.attempts, mode: env.PIPELINE_MODE })

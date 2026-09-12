@@ -28,6 +28,16 @@ function validQid(qid: string): boolean {
   return QID_RE.test(qid)
 }
 
+/**
+ * ?title= 标题提示（契约 ENDPOINTS.analysis 注释）：来自 /search 候选或上游跳转。
+ * trim + 200 字上限，空串视为未传。服务端不信任它 —— fetchAnswers 有回答 URL
+ * 强校验兜底；无 title 且缓存 miss 时 runner 会快失败（不碰网络）。
+ */
+function titleHintOf(raw: string | undefined): string | undefined {
+  const t = (raw ?? '').trim()
+  return t ? t.slice(0, 200) : undefined
+}
+
 /** 取出 ready 快照；解析失败视为未命中（会触发重跑） */
 function readyAnalysis(qid: string, date: string) {
   const row = getAnalysis(date, qid)
@@ -68,6 +78,7 @@ function progressOrFallback(date: string, qid: string) {
 analysisRoutes.get('/questions/:qid/analysis', (c) => {
   const qid = c.req.param('qid')
   if (!validQid(qid)) return failResp(c, 404, '问题不存在或不是知乎问题')
+  const titleHint = titleHintOf(c.req.query("title"))
 
   const date = todayKey()
   const row = getAnalysis(date, qid)
@@ -79,14 +90,14 @@ analysisRoutes.get('/questions/:qid/analysis', (c) => {
     // ready 但快照缺失/损坏：重跑一次（重跑后状态变 pending，不会反复触发）
     log.warn('analysis.readyButNoSnapshot', { qid, date })
     const fixed = restart(date, qid)
-    if (fixed.owned && fixed.job) startRunner(date, qid, fixed.job)
+    if (fixed.owned && fixed.job) startRunner(date, qid, fixed.job, titleHint)
     return okData(c, 202, progressOrFallback(date, qid))
   }
 
   // 2) 参与 INSERT 竞争；owned 才有资格启动 runner
   const acq = tryAcquire(date, qid)
   if (acq.owned && acq.job) {
-    startRunner(date, qid, acq.job)
+    startRunner(date, qid, acq.job, titleHint)
   } else {
     log.debug('analysis.get.attach', { qid, date, jobId: acq.job?.id ?? null })
   }
@@ -100,6 +111,7 @@ analysisRoutes.get('/questions/:qid/analysis', (c) => {
 analysisRoutes.post('/questions/:qid/analysis', (c) => {
   const qid = c.req.param('qid')
   if (!validQid(qid)) return failResp(c, 404, '问题不存在或不是知乎问题')
+  const titleHint = titleHintOf(c.req.query("title"))
 
   const date = todayKey()
   const force = c.req.query('force') === '1'
@@ -114,7 +126,7 @@ analysisRoutes.post('/questions/:qid/analysis', (c) => {
     }
     // force=1：删旧 job 行后重跑（覆盖旧快照）
     const acq = restart(date, qid)
-    if (acq.owned && acq.job) startRunner(date, qid, acq.job)
+    if (acq.owned && acq.job) startRunner(date, qid, acq.job, titleHint)
     return okData(c, 202, progressOrFallback(date, qid))
   }
 
@@ -128,7 +140,7 @@ analysisRoutes.post('/questions/:qid/analysis', (c) => {
   const acq = row?.status === 'failed' ? restart(date, qid) : tryAcquire(date, qid)
   if (acq.owned && acq.job) {
     log.info('analysis.retry.start', { qid, date, attempts: acq.job.attempts, force })
-    startRunner(date, qid, acq.job)
+    startRunner(date, qid, acq.job, titleHint)
   }
   return okData(c, 202, progressOrFallback(date, qid))
 })

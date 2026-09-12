@@ -11,7 +11,7 @@
 
 import type { Context } from 'hono'
 
-export type HttpStatus = 200 | 202 | 400 | 403 | 404 | 500
+export type HttpStatus = 200 | 202 | 400 | 403 | 404 | 429 | 500 | 502 | 503
 
 export function okData<T>(c: Context, status: 200 | 202, data: T): Response {
   return c.json({ code: 0, data }, status)

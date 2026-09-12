@@ -4,6 +4,7 @@
  * 挂载：
  *   /api/v1/health
  *   /api/v1/hot
+ *   /api/v1/search
  *   /api/v1/questions/:qid/analysis   (GET 主端点 / POST 重试)
  *
  * 启动自检只打印「是否配置 + 长度 + SHA-256 短前缀」，不打印任何凭证本体。
@@ -21,6 +22,7 @@ import { failResp } from './http'
 import { analysisRoutes } from './routes/analysis'
 import { healthRoutes } from './routes/health'
 import { hotRoutes } from './routes/hot'
+import { searchRoutes } from './routes/search'
 import { isLive } from './zhihu/client'
 import { todayKey } from './time'
 
@@ -42,6 +44,7 @@ app.use('*', async (c, next) => {
 
 app.route(API_V1, healthRoutes)
 app.route(API_V1, hotRoutes)
+app.route(API_V1, searchRoutes)
 app.route(API_V1, analysisRoutes)
 
 // 便捷别名（运维探活用），与契约路径指向同一实现
