@@ -146,9 +146,9 @@ pnpm build      # 全 workspace 构建
 | `PREGENERATE_TOP` | 可选 | `30` | 每日预生成题数上限（热榜取前 N 题） |
 | `ANALYSIS_RETRY_COOLDOWN_SEC` | 可选 | `60` | `failed` 后再试的冷却窗口，防连点打穿额度 |
 | `ANALYSIS_JOB_TIMEOUT_SEC` | 可选 | `180` | 单 job 总时限，超时置 `timeout` |
-| `LLM_RPM_LIMIT` | 可选 | `300` | 全局令牌桶；提取/取向默认并发提高后，仍以此限制总请求速率，可按服务商承载调低 |
-| `PIPELINE_EXTRACT_CONCURRENCY` | 可选 | `8` | 单题提取批次并发；按服务商承载调节 |
-| `PIPELINE_ORIENT_CONCURRENCY` | 可选 | `12` | 单题取向并发；按服务商承载调节 |
+| `LLM_RPM_LIMIT` | 可选 | `1000` | 全局令牌桶；提取/取向默认并发提高后，仍以此限制总请求速率，可按服务商承载调低 |
+| `PIPELINE_EXTRACT_CONCURRENCY` | 可选 | `30` | 单题提取批次并发；按服务商承载调节 |
+| `PIPELINE_ORIENT_CONCURRENCY` | 可选 | `100` | 单题取向并发；按服务商承载调节 |
 | `PREGENERATE_CONCURRENCY` | 可选 | `4` | 热榜预生成跨题并发；搜索与 LLM 仍受各自限流约束 |
 | `ZHIHU_LIVE` | 可选 | `1` | 只有 `=1` 且凭证已配置才允许真实知乎调用；未开启或未配置时直接返回错误。生产应与 `PIPELINE_MODE=llm` 一起设置。 |
 | `PIPELINE_MODE` | 可选 | `llm` | `llm` 走真实多智能体管线；`fake` 仅在显式指定时走本地确定性管线。未配置时默认 `llm`，非法值直接拒绝启动。 |
