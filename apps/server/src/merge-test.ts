@@ -37,4 +37,16 @@ const constrained = normalizeMergedJudgments(ambiguous, [
 assert.equal(constrained[0]?.answerIds[0], 'x2')
 assert.equal(constrained.some((j) => j.text === '值得尝试' && j.answerIds[0] === 'x1'), true)
 
+// 归并模型只在 factionGroups 填来源时，仍应提升到 judgment 级别并保留。
+const groupedOnly = normalizeMergedJudgments(items, [
+  {
+    text: '成本变化是否会影响普及',
+    factionGroups: [
+      { label: '支持扩大普及', answerIds: ['a1'], sourceQuotes: ['成本下降会扩大普及。'] },
+    ],
+  },
+], 5, 5)
+assert.equal(groupedOnly[0]?.answerIds.includes('a1'), true)
+assert.equal(groupedOnly[0]?.sourceQuotes.includes('成本下降会扩大普及。'), true)
+
 console.log('merge attribution tests passed')

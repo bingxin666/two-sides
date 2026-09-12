@@ -401,8 +401,19 @@ export function normalizeMergedJudgments(
   const known = new Set(items.map((i) => i.answerId))
   const modelMerged: MergedJudgment[] = candidates
     .map((j, i) => {
-      const explicitIds = (j.answerIds ?? []).filter((id) => known.has(id))
-      const sourceQuotes = (j.sourceQuotes ?? []).slice(0, 4)
+      // 模型有时只在 factionGroups 里填写来源，顶层 answerIds/sourceQuotes 留空。
+      // 先把派系分组的来源提升到 judgment 级别，避免这些判断因无法追溯而被丢弃。
+      const factionGroups = (j.factionGroups ?? []).map((g) => ({
+        label: g.label.trim(),
+        answerIds: [...new Set((g.answerIds ?? []).filter((id) => known.has(id)))],
+        sourceQuotes: (g.sourceQuotes ?? [])
+          .filter((q) => items.some((item) => quoteMatchesExtracted(q, item.quote)))
+          .slice(0, 6),
+      })).filter((g) => g.label && (g.answerIds.length > 0 || g.sourceQuotes.length > 0)).slice(0, 6)
+      const groupIds = factionGroups.flatMap((g) => g.answerIds)
+      const groupQuotes = factionGroups.flatMap((g) => g.sourceQuotes)
+      const explicitIds = [...new Set([...(j.answerIds ?? []), ...groupIds])].filter((id) => known.has(id))
+      const sourceQuotes = [...new Set([...(j.sourceQuotes ?? []), ...groupQuotes])].slice(0, 8)
       const inferredIds = sourceQuotes.flatMap((sourceQuote) => {
         const matches = items.filter((item) => quoteMatchesExtracted(sourceQuote, item.quote))
         // 若模型显式给了 answerIds，sourceQuote 的同文匹配只能在这些来源内
@@ -418,11 +429,7 @@ export function normalizeMergedJudgments(
         sourceQuotes,
         answerIds: [...new Set([...explicitIds, ...inferredIds])],
         factionHints: (j.factionHints ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 6),
-        factionGroups: (j.factionGroups ?? []).map((g) => ({
-          label: g.label.trim(),
-          answerIds: [...new Set((g.answerIds ?? []).filter((id) => known.has(id)))],
-          sourceQuotes: (g.sourceQuotes ?? []).filter((q) => items.some((item) => quoteMatchesExtracted(q, item.quote))).slice(0, 6),
-        })).filter((g) => g.label && (g.answerIds.length > 0 || g.sourceQuotes.length > 0)).slice(0, 6),
+        factionGroups,
       }
     })
     .filter((j) => j.answerIds.length > 0 || j.sourceQuotes.some((quote) =>
