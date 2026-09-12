@@ -5,9 +5,20 @@
 #
 # docs/03 §3：服务商与模型解耦，Agent 按名引用；failover 只在 Agent 级，
 # 主路径连续失败 FAILOVER_THRESHOLD（默认 3）次后切到 fallback。
-# 知乎直答不在这套配置里（独立鉴权与模型档位，见 llm/zhida 的 D1 实现）。
+# 知乎直答不在这套配置里（独立鉴权与模型档位，见 llm/zhida.ts）。
+#
+# ⚠️ D1 现实约束（2026-09-12 team-lead 确认）：当前只有 ORIGAMI_API_KEY 配置了 key，
+# 所以 extract / merge / orient 的 primary 直接绑 origami，deepseek/glm/qwen 作为
+# fallback 条目保留 —— 未配置 key 的 provider 会在解析期被跳过（不发请求、不计 failover），
+# 留着无害。等 DEEPSEEK_API_KEY 到位后，把 primary 切回官方直连即可。
 
 providers:
+  # 中转端点（OpenAI 兼容），当前唯一已配置 key 的服务商
+  - name: origami
+    baseUrl: https://ai.origami.pub/v1
+    apiKeyEnv: ORIGAMI_API_KEY
+    models: [deepseek-v4-flash]
+
   - name: deepseek
     baseUrl: https://api.deepseek.com/v1
     apiKeyEnv: DEEPSEEK_API_KEY
@@ -23,26 +34,21 @@ providers:
     apiKeyEnv: QWEN_API_KEY
     models: [qwen-plus, qwen-turbo]
 
-  # 中转端点（OpenAI 兼容）。baseUrl 非涉密，key 仍只从 env 读。
-  - name: origami
-    baseUrl: https://ai.origami.pub/v1
-    apiKeyEnv: ORIGAMI_API_KEY
-    models: [deepseek-v4-flash]
-
 agents:
   extract:
-    provider: deepseek
-    model: deepseek-chat
-    fallback: { provider: origami, model: deepseek-v4-flash }
+    provider: origami
+    model: deepseek-v4-flash
+    fallback: { provider: deepseek, model: deepseek-chat }
   merge:
-    provider: deepseek
-    model: deepseek-reasoner
-    fallback: { provider: glm, model: glm-4-plus }
+    provider: origami
+    model: deepseek-v4-flash
+    fallback: { provider: deepseek, model: deepseek-reasoner }
   orient:
-    provider: deepseek
-    model: deepseek-chat
-    fallback: { provider: qwen, model: qwen-plus }
-  # 仅直答额度耗尽时用于综述降级
+    provider: origami
+    model: deepseek-v4-flash
+    fallback: { provider: deepseek, model: deepseek-chat }
+  # 综述降级链：zhida 额度耗尽 → 这里。glm 未配置 key，留着的兜底是空转，
+  # 所以 primary 也绑 origami（有 key 才是真正的兜底）。
   summaryFallback:
-    provider: glm
-    model: glm-4-flash
+    provider: origami
+    model: deepseek-v4-flash

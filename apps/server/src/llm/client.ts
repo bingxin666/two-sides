@@ -55,6 +55,9 @@ export class LlmError extends Error {
 const DEFAULT_TIMEOUT_MS = 60_000
 const MAX_ATTEMPTS = 3 // 首次 + 2 次重试
 
+/** LLM 调用计数（诊断/额度观测用；不含任何凭证信息） */
+export const llmCounters = { calls: 0, parseFailures: 0, tokens: 0 }
+
 function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500
 }
@@ -106,11 +109,18 @@ export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>>
 
     // 全局令牌桶：管线共享，防打爆
     await llmBucket.take(1)
+    llmCounters.calls++
 
     const controller = new AbortController()
     const onOuterAbort = () => controller.abort()
     req.signal?.addEventListener('abort', onOuterAbort, { once: true })
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
+    // 标记本次 abort 是「我们自己的超时」还是「外部取消」—— 两者语义不同：
+    // 超时可重试，外部取消必须立即上抛
+    let timedOut = false
+    const timer = setTimeout(() => {
+      timedOut = true
+      controller.abort()
+    }, timeoutMs)
 
     const started = performance.now()
     try {
@@ -160,6 +170,7 @@ export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>>
         try {
           content = req.validate(raw)
         } catch (e) {
+          llmCounters.parseFailures++
           lastErr = new LlmError(
             `llm output failed validation: ${e instanceof Error ? e.message : String(e)}`,
             'parse',
@@ -169,28 +180,35 @@ export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>>
         }
       }
 
+      const usage = payload.usage
+        ? {
+            promptTokens: payload.usage.prompt_tokens ?? 0,
+            completionTokens: payload.usage.completion_tokens ?? 0,
+            totalTokens:
+              payload.usage.total_tokens ??
+              (payload.usage.prompt_tokens ?? 0) + (payload.usage.completion_tokens ?? 0),
+          }
+        : undefined
+      if (usage) llmCounters.tokens += usage.totalTokens
+
       return {
         content: content as T,
         raw,
         model: req.model,
         latencyMs,
-        usage: payload.usage
-          ? {
-              promptTokens: payload.usage.prompt_tokens ?? 0,
-              completionTokens: payload.usage.completion_tokens ?? 0,
-              totalTokens:
-                payload.usage.total_tokens ??
-                (payload.usage.prompt_tokens ?? 0) + (payload.usage.completion_tokens ?? 0),
-            }
-          : undefined,
+        usage,
       }
     } catch (e) {
       if (e instanceof LlmError) {
         if (e.kind === 'http' || e.kind === 'config') throw e
         lastErr = e
       } else if (isAbortError(e)) {
-        // 外部 abort（job 超时 / 取消）不属于可重试失败，直接上抛
-        throw new LlmError('aborted', 'aborted')
+        if (req.signal?.aborted && !timedOut) {
+          // 外部 abort（job 超时 / 取消）不属于可重试失败，直接上抛
+          throw new LlmError('aborted', 'aborted')
+        }
+        // 自己的超时：按可重试的 timeout 处理
+        lastErr = new LlmError(`llm timeout after ${timeoutMs}ms`, 'timeout')
       } else {
         lastErr = new LlmError(`llm network error: ${String(e).slice(0, 200)}`, 'network')
       }

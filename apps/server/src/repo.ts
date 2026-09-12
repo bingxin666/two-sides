@@ -374,6 +374,41 @@ export function purgeBefore(cutoffDateKey: string): void {
   tx()
 }
 
+/* -------------------------- question_titles 缓存 -------------------------- */
+
+export interface QuestionTitleRow {
+  qid: string
+  title: string
+  source: string
+  fetched_at: string
+}
+
+function titleStmts(db: ReturnType<typeof getDb>) {
+  return {
+    get: db.query<QuestionTitleRow | null, [string]>(
+      `SELECT qid, title, source, fetched_at FROM question_titles WHERE qid = ?`,
+    ),
+    put: db.query<void, [string, string, string, string]>(
+      // 首次解析结果为准，冲突不覆盖
+      `INSERT INTO question_titles (qid, title, source, fetched_at) VALUES (?, ?, ?, ?)
+       ON CONFLICT (qid) DO NOTHING`,
+    ),
+  }
+}
+
+let _ts: ReturnType<typeof titleStmts> | null = null
+
+export function getQuestionTitle(qid: string): QuestionTitleRow | null {
+  if (!_ts) _ts = titleStmts(getDb())
+  return _ts.get.get(qid) ?? null
+}
+
+/** 只在首次写入时生效（冲突即放弃），后续解析结果不覆盖缓存 */
+export function cacheQuestionTitle(qid: string, title: string, source: string): void {
+  if (!_ts) _ts = titleStmts(getDb())
+  _ts.put.run(qid, title, source, nowIso())
+}
+
 function clamp01(n: number): number {
   if (!Number.isFinite(n)) return 0
   return Math.min(1, Math.max(0, n))

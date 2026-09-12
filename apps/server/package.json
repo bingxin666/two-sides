@@ -9,7 +9,8 @@
     "start": "bun run src/index.ts",
     "build": "bun build --target=bun --outdir dist src/index.ts",
     "typecheck": "tsc --noEmit",
-    "seed": "bun run src/seed.ts"
+    "seed": "bun run src/seed.ts",
+    "pipeline:test": "bun run src/pipeline-test.ts"
   },
   "dependencies": {
     "@two-sides/contract": "workspace:*",

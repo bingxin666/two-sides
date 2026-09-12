@@ -1,14 +1,26 @@
 /**
- * 知乎开放平台客户端
+ * 知乎开放平台客户端（D1 已按真实 payload 收紧，docs/03 §8）
  *
- * docs/03 §8：
- *  - 统一鉴权：Authorization: Bearer <ZHIHU_ACCESS_SECRET> + X-Request-Timestamp（秒级）
- *  - 基础域名 https://developer.zhihu.com（Access Secret 不发送到其他主机）
- *  - 内容接口可能在 HTTP 200 里返回业务错误（Code != 0），必须判 Code
- *  - 错误码映射见 §8.4
+ * 真实响应结构（2026-09-12 实测）：
+ *   hot_list / zhihu_search → { Code, Message, Data: { Total?, HasMore?, SearchHashId?, Items: [...] } }
+ *   hot_list 的 Item：{ Title, Url, ThumbnailUrl, Summary }
+ *   zhihu_search 的 Item：{ Title, ContentType:"Answer", ContentID, ContentText, Url,
+ *                           CommentCount, VoteUpCount, AuthorName, AuthorAvatar, AuthorBadge,
+ *                           AuthorBadgeText, EditTime, AuthorityLevel, RankingScore }
  *
- * D0 闸门：默认不发真实请求（ZHIHU_LIVE=1 且凭证已配置才放行），
- * 防止开发期烧掉黑客松日额度。未放行时 quota() 返回 null，调用方降级。
+ * 踩坑点（docs/03 §8.3，已全部落实）：
+ *   · AuthorityLevel 是 String（"1"–"4"），入库前转 number
+ *   · AuthorBadge 是图片 URL，AuthorBadgeText 才是认证文案 —— 只用后者
+ *   · Url 自带溯源 UTM，原样透传，不改写不去参
+ *   · ContentText 长回答可能截断（实测 ~1000 字量级），喂模型时再截
+ *   · HTTP 200 里可能藏业务错误（Code != 0），必须判 Code
+ *   · 搜索结果只有 CommentCount，没有评论内容/CommentInfoList —— commentChallengeCount
+ *     暂时无数据来源（见 agents/llm.ts，待与产品确认口径）
+ *
+ * 鉴权：Authorization: Bearer <ZHIHU_ACCESS_SECRET> + X-Request-Timestamp（秒级），
+ * 基础域名 https://developer.zhihu.com，Access Secret 不发送到其他主机。
+ *
+ * D0 闸门：默认不发真实请求（ZHIHU_LIVE=1 且凭证已配置才放行）。
  */
 
 import type { ErrorCode } from '@two-sides/contract'
@@ -35,6 +47,19 @@ export function isLive(): boolean {
   return env.ZHIHU_LIVE && !!process.env.ZHIHU_ACCESS_SECRET
 }
 
+/** 真实调用计数（进程内累计，额度观测/测试报告用；不含任何凭证信息） */
+export const zhihuCounters = { search: 0, hotList: 0, quota: 0 }
+
+/**
+ * 从知乎 URL 提取问题 id（/question/<digits>/）。
+ * /search 候选提取、回答归属强校验、hot_list 过滤共用这一条规则。
+ * 非问题页（专栏文章 zhuanlan 等）返回 null。
+ */
+export function questionIdFromUrl(url: string): string | null {
+  const m = /\/question\/(\d{1,20})(?:\/|\?|#|$)/.exec(url.trim())
+  return m?.[1] ?? null
+}
+
 /* --------------------------- 业务错误码映射 --------------------------- */
 
 export function mapZhihuCode(code: number): { errorCode: ErrorCode; retryable: boolean } {
@@ -56,33 +81,34 @@ export function mapZhihuCode(code: number): { errorCode: ErrorCode; retryable: b
   }
 }
 
-/* ------------------------------ 原始形状 ------------------------------ */
+/* ------------------------- 真实响应形状（实测） ------------------------- */
 
-/**
- * 开放平台字段名以实际联调为准；这里只声明我们用到的部分且全部可选，
- * 用宽松解析兜底，避免字段缺失直接崩。D1 联调时按真实 payload 收紧。
- */
-interface ZhihuAuthor {
-  Name?: string
-  AuthorBadgeText?: string
-  /** 源接口返回 String（"1"–"4"），必须转 number */
-  AuthorityLevel?: string | number
-}
-
-interface ZhihuItem {
-  Url?: string
+/** zhihu_search 的 Item（实测字段，全部按需声明） */
+export interface ZhihuItem {
   Title?: string
+  /** "Answer" | "Article"（专栏）—— 只收 Answer */
+  ContentType?: string
+  /** 内容 id（回答 id），实测为 String */
+  ContentID?: string
   ContentText?: string
-  VoteUp?: number | string
-  Author?: ZhihuAuthor
-  CommentInfoList?: Array<{ Content?: string }>
+  /** 带 UTM 的原文链接，原样透传 */
+  Url?: string
+  CommentCount?: number | string
+  /** 注意：是 VoteUpCount，不是 VoteUp */
+  VoteUpCount?: number | string
+  AuthorName?: string
+  /** 认证标图片 URL —— 不使用 */
+  AuthorBadge?: string
+  /** 认证文案 —— 只用这个 */
+  AuthorBadgeText?: string
+  /** String "1"–"4" */
+  AuthorityLevel?: string | number
 }
 
 interface ZhihuEnvelope {
   Code?: number
   Message?: string
-  Data?: unknown
-  data?: unknown
+  Data?: { Items?: ZhihuItem[]; Total?: number; HasMore?: boolean } | ZhihuItem[] | null
 }
 
 /* -------------------------------- 工具 -------------------------------- */
@@ -95,11 +121,11 @@ function authHeaders(): Record<string, string> {
   }
 }
 
-function unwrapData(payload: ZhihuEnvelope): unknown {
-  if (Array.isArray(payload)) return payload
-  if (payload.Data !== undefined) return payload.Data
-  if (payload.data !== undefined) return payload.data
-  return undefined
+function itemsOf(payload: ZhihuEnvelope): ZhihuItem[] {
+  const d = payload.Data
+  if (Array.isArray(d)) return d
+  if (d && Array.isArray(d.Items)) return d.Items
+  return []
 }
 
 function assertOk(payload: ZhihuEnvelope, op: string): void {
@@ -107,18 +133,25 @@ function assertOk(payload: ZhihuEnvelope, op: string): void {
   if (typeof code !== 'number') return // 有些接口不带 Code，视为成功
   if (code === 0) return
   const { errorCode, retryable } = mapZhihuCode(code)
-  // 只记 code 与简短 message，不记完整响应体
+  // 只记 code 与映射结果，不记完整响应体
   log.warn('zhihu.businessError', { op, code, errorCode, retryable })
   throw new ZhihuError(`zhihu ${op} failed (code=${code})`, errorCode, retryable, code)
 }
 
-async function getJson(path: string, params: Record<string, string | number>): Promise<ZhihuEnvelope> {
+async function getJson(
+  path: string,
+  params: Record<string, string | number>,
+): Promise<ZhihuEnvelope> {
   const url = new URL(path, BASE)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v))
 
   let res: Response
   try {
-    res = await fetch(url, { method: 'GET', headers: authHeaders(), signal: AbortSignal.timeout(15_000) })
+    res = await fetch(url, {
+      method: 'GET',
+      headers: authHeaders(),
+      signal: AbortSignal.timeout(15_000),
+    })
   } catch (e) {
     throw new ZhihuError(`zhihu network error: ${String(e).slice(0, 200)}`, 'zhihu_error', true)
   }
@@ -153,20 +186,14 @@ export interface HotQuestion {
  */
 export async function hotList(limit = 30): Promise<HotQuestion[]> {
   if (!isLive()) throw new ZhihuError('zhihu disabled (ZHIHU_LIVE=0)', 'zhihu_error', false)
+  zhihuCounters.hotList++
   const payload = await getJson('/api/v1/content/hot_list', { Limit: Math.min(30, limit) })
   assertOk(payload, 'hot_list')
 
-  const data = unwrapData(payload)
-  const list: ZhihuItem[] = Array.isArray(data)
-    ? (data as ZhihuItem[])
-    : Array.isArray((data as { Data?: ZhihuItem[] })?.Data)
-      ? ((data as { Data: ZhihuItem[] }).Data ?? [])
-      : []
-
   const out: HotQuestion[] = []
   const seen = new Set<string>()
-  for (const it of list) {
-    const url = it.Url ?? ''
+  for (const it of itemsOf(payload)) {
+    const url = (it.Url ?? '').trim()
     const m = /question\/(\d+)/.exec(url)
     if (!m) continue // 文章类，跳过
     const qid = m[1]!
@@ -182,22 +209,17 @@ export async function hotList(limit = 30): Promise<HotQuestion[]> {
 export async function search(query: string, count = 10): Promise<ZhihuItem[]> {
   if (!isLive()) throw new ZhihuError('zhihu disabled (ZHIHU_LIVE=0)', 'zhihu_error', false)
   if (!query.trim()) throw new ZhihuError('zhihu search: empty query', 'parse_error', false)
+  zhihuCounters.search++
   const payload = await getJson('/api/v1/content/zhihu_search', {
     Query: query,
     Count: Math.max(1, Math.min(10, count)),
   })
   assertOk(payload, 'zhihu_search')
-  const data = unwrapData(payload)
-  const list = Array.isArray(data)
-    ? (data as ZhihuItem[])
-    : Array.isArray((data as { Data?: ZhihuItem[] })?.Data)
-      ? ((data as { Data: ZhihuItem[] }).Data ?? [])
-      : []
-  log.info('zhihu.search', { count: list.length })
-  return list
+  const items = itemsOf(payload).filter((it) => it.ContentType !== 'Article')
+  log.info('zhihu.search', { count: items.length })
+  return items
 }
 
-/** null = 额度未知（契约 QuotaResp 三字段均 nullable），绝不用 0/-1 谎报 */
 export interface QuotaMap {
   zhihu_search: number | null
   hot_list: number | null
@@ -213,12 +235,23 @@ export async function quota(): Promise<QuotaMap | null> {
     log.debug('zhihu.quota.skipped', { live: false, ...zhihuSecretStatus() })
     return null
   }
+  zhihuCounters.quota++
   try {
     const payload = await getJson('/api/v1/quota', {
       APIIDs: 'zhihu_search,hot_list,zhida_openai',
     })
     assertOk(payload, 'quota')
-    return normalizeQuota(unwrapData(payload))
+    // keys-only 形状日志：值不打印（额度数字无害，但保持日志最小化），形状变化立刻可见
+    const data = (payload as { Data?: unknown }).Data
+    log.debug('zhihu.quota.shape', {
+      topKeys: Object.keys(payload as object),
+      dataKind: Array.isArray(data) ? `array(${data.length})` : typeof data,
+      rowKeys:
+        Array.isArray(data) && data[0] && typeof data[0] === 'object'
+          ? Object.keys(data[0] as object)
+          : null,
+    })
+    return normalizeQuota(data)
   } catch (e) {
     // 额度查询失败绝不能拖挂 /health
     log.warn('zhihu.quota.failed', {
@@ -229,45 +262,28 @@ export async function quota(): Promise<QuotaMap | null> {
 }
 
 /**
- * 额度响应形状不确定（可能是 map / 数组 / 嵌套），统一收敛成三个数。
- * 取不到就 null（额度未知），让前端显示「额度未知」而不是谎报 0。
+ * 额度响应形状（2026-09-12 实测收紧）：
+ *   Data 是数组，元素 { APIID, APIName, TotalQuota, TotalUsed, RemainingQuota }。
+ * 只认 APIID + RemainingQuota 字段；缺字段/非法值 → null（额度未知），绝不谎报 0。
  */
 function normalizeQuota(data: unknown): QuotaMap {
   const out: QuotaMap = { zhihu_search: null, hot_list: null, zhida_openai: null }
-  const put = (key: string, val: unknown) => {
-    if (!(key in out)) return
-    const n = typeof val === 'number' ? val : Number(val)
-    if (Number.isFinite(n) && n >= 0) out[key as keyof QuotaMap] = Math.trunc(n)
-  }
-  if (Array.isArray(data)) {
-    for (const row of data as Array<Record<string, unknown>>) {
-      const id = String(row.APIID ?? row.ApiId ?? row.api_id ?? row.Name ?? '')
-      const remain = row.Remain ?? row.Remaining ?? row.Quota ?? row.Limit ?? row.Value
-      put(id, remain)
-    }
-    return out
-  }
-  if (data && typeof data === 'object') {
-    for (const [k, v] of Object.entries(data as Record<string, unknown>)) {
-      if (v && typeof v === 'object') {
-        const inner = v as Record<string, unknown>
-        put(k, inner.Remain ?? inner.Remaining ?? inner.Quota ?? inner.Limit ?? inner.Value)
-      } else {
-        put(k, v)
-      }
-    }
+  if (!Array.isArray(data)) return out
+  for (const row of data as Array<Record<string, unknown>>) {
+    const id = typeof row?.APIID === 'string' ? row.APIID : ''
+    if (!(id in out)) continue
+    const n = Number(row.RemainingQuota)
+    if (Number.isFinite(n) && n >= 0) out[id as keyof QuotaMap] = Math.trunc(n)
   }
   return out
 }
 
-/** 把 AuthorBadgeText / AuthorityLevel 收敛成契约类型（String → number） */
-export function normalizeAuthority(raw: ZhihuItem['Author']): 1 | 2 | 3 | 4 {
-  const n = Number(raw?.AuthorityLevel)
+/** AuthorityLevel：源接口返回 String（"1"–"4"），入库转 number，越界收敛到 1–4 */
+export function normalizeAuthority(raw: ZhihuItem['AuthorityLevel']): 1 | 2 | 3 | 4 {
+  const n = Number(raw)
   if (!Number.isFinite(n)) return 1
   const c = Math.trunc(n)
   if (c <= 1) return 1
   if (c >= 4) return 4
   return c === 2 ? 2 : 3
 }
-
-export type { ZhihuItem, ZhihuAuthor }

@@ -15,6 +15,7 @@
 import type { Analysis, Judgment } from '@two-sides/contract'
 import { Analysis as AnalysisSchema, checkCountingRules } from '@two-sides/contract'
 import { createFakeAgents } from './agents/fake'
+import { createLlmAgents } from './agents/llm'
 import {
   mapPool,
   PipelineError,
@@ -40,13 +41,8 @@ export const summaryDegradation = { count: 0 }
 
 export function createAgents(mode: 'fake' | 'llm'): PipelineAgents {
   if (mode === 'fake') return createFakeAgents()
-  // D1：真实 LLM 实现，签名与 fake 完全一致
-  throw new PipelineError(
-    'llm pipeline not implemented yet (D1)',
-    'llm_error',
-    'extract',
-    true,
-  )
+  // D1：真实 LLM + 知乎调用（受 PIPELINE_MODE 与 ZHIHU_LIVE 双闸约束）
+  return createLlmAgents()
 }
 
 /** 01 输入分批 */
@@ -79,11 +75,13 @@ export async function runPipeline(
 
   /* ---------- 01 提取 ---------- */
   const batches = batchAnswers(answers)
+  const extractErrors: unknown[] = []
   const extracted = await mapPool(
     batches,
     EXTRACT_CONCURRENCY,
     (batch) => agents.extract(batch, ctx),
     (_batch, index, e) => {
+      extractErrors.push(e)
       note(`extract.batch.${index}.failed`, {
         reason: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
       })
@@ -101,8 +99,13 @@ export async function runPipeline(
   })
 
   if (judgmentsRaw.length === 0) {
-    // docs/03 §6.1：全部提取失败 → failed
-    throw new PipelineError('全部提取批次失败', 'llm_error', 'extract', true)
+    // docs/03 §6.1：全部提取失败 → failed。
+    // 归类：agent 抛出的 PipelineError 已带正确 code（结构化解析失败 → parse_error）
+    const first = extractErrors.find((e): e is PipelineError => e instanceof PipelineError)
+    throw (
+      first ??
+      new PipelineError('全部提取批次失败', 'llm_error', 'extract', true)
+    )
   }
   note('extract.done', { batches: batches.length, extracted: judgmentsRaw.length })
 
@@ -112,6 +115,7 @@ export async function runPipeline(
   try {
     merged = await agents.merge(judgmentsRaw, ctx)
   } catch (e) {
+    if (e instanceof PipelineError) throw e // agent 已归类（含 parse_error）
     throw new PipelineError(
       `归并失败: ${e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200)}`,
       'llm_error',
@@ -119,15 +123,20 @@ export async function runPipeline(
       true,
     )
   }
+  if (merged.length === 0) {
+    throw new PipelineError('归并后没有可用的判断', 'parse_error', 'merge', true)
+  }
   ctx.report({ stage: 'merge', stageRatio: 1, judgmentsTotal: merged.length })
 
   /* ---------- 03 取向 ---------- */
   let oriented = 0
+  const orientErrors: unknown[] = []
   const orientResults = await mapPool(
     merged,
     ORIENT_CONCURRENCY,
     (j) => agents.orient(j, answers, ctx),
     (j, _i, e) => {
+      orientErrors.push(e)
       note(`orient.${j.id}.failed`, {
         reason: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
       })
@@ -147,7 +156,9 @@ export async function runPipeline(
     })
   }
   if (judgments.length === 0) {
-    throw new PipelineError('全部判断归位失败', 'llm_error', 'orient', true)
+    // 全部判断归位失败：优先透传 agent 归类（parse_error 等）
+    const first = orientErrors.find((e): e is PipelineError => e instanceof PipelineError)
+    throw first ?? new PipelineError('全部判断归位失败', 'llm_error', 'orient', true)
   }
   note('orient.done', { total: merged.length, ok: judgments.length })
 

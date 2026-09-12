@@ -62,6 +62,16 @@ CREATE TABLE IF NOT EXISTS jobs (
   UNIQUE (date, qid)
 );
 
+-- 题目标题永久缓存（每题一生一次）：
+-- 标题解析是懒生成路径的前提（og:title / global_search），成功后永久复用，
+-- 避免每次生成都重新抓页面（也少一次被反爬拒绝的机会）。
+CREATE TABLE IF NOT EXISTS question_titles (
+  qid        TEXT PRIMARY KEY,
+  title      TEXT NOT NULL,
+  source     TEXT NOT NULL,             -- og:title | global_search | hint
+  fetched_at TEXT NOT NULL
+);
+
 CREATE INDEX IF NOT EXISTS idx_analyses_date_status ON analyses (date, status);
 CREATE INDEX IF NOT EXISTS idx_jobs_date_status ON jobs (date, status);
 `

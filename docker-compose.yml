@@ -47,12 +47,10 @@ services:
   # ----------------------------------------------------------
   # API 层：Bun + Hono + SQLite
   #
-  # 关于每日预生成（cron）：后端目前尚未实现 /internal/pregenerate，
-  # 也未内置 00:30 定时器 —— 属 D2 待办（见 docs/03 §9）。
-  # 端点落地后：crontab -e 加一行
-  #   30 0 * * * curl -fsS -X POST -H "X-Internal-Token: $INTERNAL_TOKEN" \
-  #     http://127.0.0.1:3000/internal/pregenerate
-  # 在此之前，快照由用户访问时的懒生成路径（GET 隐式触发）自然填充。
+  # 每日预生成（cron）方案已拍板（2026-09-12）：**进程内定时器**
+  # （Bun timer 计算下一个 Asia/Shanghai 00:30），单容器零依赖；
+  # 外部 crontab + /internal/pregenerate 整条路线砍掉，故无需 INTERNAL_TOKEN。
+  # 端点未实现前，快照由懒生成路径（GET /analysis 未命中隐式触发）自然填充。
   # ----------------------------------------------------------
   server:
     build:
@@ -66,8 +64,12 @@ services:
     environment:
       # ---- 时区铁律：所有按日快照以东八区日期为主键 ----
       TZ: Asia/Shanghai
-      # ---- 知乎开放平台（必填）----
-      ZHIHU_ACCESS_SECRET: ${ZHIHU_ACCESS_SECRET:?请在 .env 中设置 ZHIHU_ACCESS_SECRET}
+      # ---- 知乎开放平台 ----
+      # ⚠️ D2 上 VPS 时必须改回 `${ZHIHU_ACCESS_SECRET:?...}` 强制必填：
+      # 它是唯一真正必需的凭证，静默缺省启动 = 每个请求都 AUTH_REQUIRED，
+      # 那种失败模式比 compose 拒启难排查得多（team-lead 2026-09-12 拍板）。
+      # 本地干跑暂用 :- 方便无 .env 环境跑通插值。
+      ZHIHU_ACCESS_SECRET: ${ZHIHU_ACCESS_SECRET:-}
       ZHIHU_ZHIDA_MODEL: ${ZHIHU_ZHIDA_MODEL:-zhida-thinking-1p5}
       # ---- 增强层 OAuth（凭证未获批时留空，整层自动不启用）----
       ZHIHU_OAUTH_APP_ID: ${ZHIHU_OAUTH_APP_ID:-}
@@ -75,7 +77,7 @@ services:
       ZHIHU_OAUTH_REDIRECT_URI: ${ZHIHU_OAUTH_REDIRECT_URI:-}
       # ---- 外部 LLM（与 config/providers.yaml 的 apiKeyEnv 一一对应）----
       # 未配置 key 的服务商会在 providers 注册表里标记 missing，不影响其余服务商
-      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:?管线主力模型，请在 .env 中设置 DEEPSEEK_API_KEY}
+      DEEPSEEK_API_KEY: ${DEEPSEEK_API_KEY:-}
       GLM_API_KEY: ${GLM_API_KEY:-}
       QWEN_API_KEY: ${QWEN_API_KEY:-}
       ORIGAMI_API_KEY: ${ORIGAMI_API_KEY:-}
@@ -91,7 +93,6 @@ services:
       # SQLite 落在具名 volume 内，容器重建不丢快照
       ZHIDUAN_DB_PATH: /app/data/two-sides.db
       PROVIDERS_CONFIG: /app/config/providers.yaml
-      INTERNAL_TOKEN: ${INTERNAL_TOKEN:-}
       ANALYSIS_RETRY_COOLDOWN_SEC: ${ANALYSIS_RETRY_COOLDOWN_SEC:-60}
       ANALYSIS_JOB_TIMEOUT_SEC: ${ANALYSIS_JOB_TIMEOUT_SEC:-180}
       LLM_RPM_LIMIT: ${LLM_RPM_LIMIT:-60}

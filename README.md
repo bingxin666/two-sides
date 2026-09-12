@@ -141,7 +141,7 @@ pnpm build      # 全 workspace 构建
 | `ZHIDUAN_DB_PATH` | 可选 | `./data/two-sides.db` | SQLite 单文件路径 |
 | `ZHIHU_ZHIDA_MODEL` | 可选 | `zhida-thinking-1p5` | 直答模型档位 |
 | `PROVIDERS_CONFIG` | 可选 | `config/providers.yaml` | 服务商与 Agent 绑定配置路径 |
-| `INTERNAL_TOKEN` | 条件 | — | 内部端点（如预生成触发）的校验 token |
+| `INTERNAL_TOKEN` | 条件 | — | 预留：仅当启用外部触发预生成端点时需要（当前方案为进程内定时器，可留空） |
 | `ANALYSIS_RETRY_COOLDOWN_SEC` | 可选 | `60` | `failed` 后再试的冷却窗口，防连点打穿额度 |
 | `ANALYSIS_JOB_TIMEOUT_SEC` | 可选 | `180` | 单 job 总时限，超时置 `timeout` |
 | `LLM_RPM_LIMIT` | 可选 | `60` | 全局令牌桶，防打爆 LLM 与知乎限频 |
@@ -194,7 +194,7 @@ docker compose up -d --build
 
 - `web` 监听 `127.0.0.1:8080`，Caddy 托管静态产物并反代 `/api/*` → `server:3000`
 - `server` 不对外暴露端口；SQLite 落在具名卷 `two-sides-server-data`
-- **每日预生成（cron）尚未实现**（`docs/03` §9，D2 待办）。在此之前，快照由用户访问时的懒生成路径（`GET /analysis` 未命中即隐式触发）自然填充，落地后同样秒开
+- **每日预生成（cron）采用进程内定时器**（每日 `Asia/Shanghai 00:30`，单容器零依赖），端点实现前快照由懒生成路径（`GET /analysis` 未命中即隐式触发）自然填充，落地后同样秒开
 - **TLS / 对外反代不归 compose 管**：自行部署反代指向 `127.0.0.1:8080` 终止 HTTPS
 - 秒开验收标准：热榜页与预置题 **TTFB < 200ms、渲染路径无任何实时生成调用**
 

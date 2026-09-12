@@ -5,7 +5,61 @@
  * 日志 / 响应 / stack / 注释里。本模块只做读取与派生，不打印值。
  */
 
+import { existsSync, readFileSync } from 'node:fs'
+import { resolve } from 'node:path'
 import { secretFingerprint } from './log'
+
+/**
+ * Bun 的 .env 自动加载只看 cwd：从 apps/server 目录跑（pnpm -F server ...）时，
+ * 仓库根的 .env 不会被加载，凭证就会「看起来没配」。
+ * 这里显式向上找 .env 并合并进 process.env（只补空缺，不覆盖已注入的值）。
+ * 安全：只写入 process.env，绝不打印任何值；路径与内容都不进日志。
+ */
+function loadDotEnv(): void {
+  const candidates = [
+    resolve(process.cwd(), '.env'),
+    resolve(process.cwd(), '../.env'),
+    resolve(process.cwd(), '../../.env'),
+  ]
+  for (const p of candidates) {
+    if (!existsSync(p)) continue
+    try {
+      const text = readFileSync(p, 'utf8')
+      let merged = 0
+      for (const raw of text.split(/\r?\n/)) {
+        const line = raw.trim()
+        if (!line || line.startsWith('#')) continue
+        const eq = line.indexOf('=')
+        if (eq <= 0) continue
+        const key = line.slice(0, eq).trim()
+        let val = line.slice(eq + 1).trim()
+        if (
+          (val.startsWith('"') && val.endsWith('"')) ||
+          (val.startsWith("'") && val.endsWith("'"))
+        ) {
+          val = val.slice(1, -1)
+        }
+        const cur = process.env[key]
+        if (cur === undefined || cur === '') {
+          process.env[key] = val
+          merged++
+        }
+      }
+      if (merged > 0) {
+        // 只报数量，不报路径与内容
+        console.log(
+          JSON.stringify({ t: new Date().toISOString(), level: 'info', msg: 'env.dotenv.merged', keys: merged }),
+        )
+      }
+      break
+    } catch {
+      // 读不了就跳过，不阻塞启动
+      break
+    }
+  }
+}
+
+loadDotEnv()
 
 function num(name: string, def: number): number {
   const raw = process.env[name]

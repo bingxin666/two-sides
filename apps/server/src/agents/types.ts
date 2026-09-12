@@ -74,6 +74,12 @@ export interface PipelineProgress {
 export interface PipelineContext {
   qid: string
   date: string
+  /**
+   * 题目标题提示（可选但强烈建议）。
+   * 实测：知乎搜索没有「按 qid 取问题」的能力，纯 qid 搜索会命中无关内容 ——
+   * 懒生成路径必须由调用方（预生成 cron 从 hot_list 拿标题，或前端透传）提供标题。
+   */
+  titleHint?: string
   /** job 超时/取消时 abort；Agent 必须在耗时点检查它 */
   signal: AbortSignal
   /** 上报进度（幂等，可高频调用） */
