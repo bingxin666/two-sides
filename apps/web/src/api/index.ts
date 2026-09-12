@@ -23,7 +23,11 @@ import { passThrough, request, type RequestOptions } from './http'
  * 保留作离线应急 —— fixtures 与适配器留在仓库，调用方零改动。
  */
 
-export const IS_MOCK = (import.meta.env.VITE_API_MODE ?? 'live') === 'mock'
+const API_MODE = import.meta.env.VITE_API_MODE ?? 'live'
+if (API_MODE !== 'live' && API_MODE !== 'mock') {
+  throw new Error(`VITE_API_MODE 必须是 live 或 mock，当前值无效: ${API_MODE}`)
+}
+export const IS_MOCK = API_MODE === 'mock'
 
 /** 当日热榜（只含已 ready 的预置题） */
 export async function getHot(): Promise<HotRespT> {
