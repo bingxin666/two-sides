@@ -129,6 +129,14 @@ export function startRunner(date: string, qid: string, job: JobRow, titleHint?: 
   void runJob(date, qid, job, titleHint)
 }
 
+/**
+ * 等待完成的 runner（预生成批次用：小并发批间等待，跑完一个再放下一批）。
+ * 与 startRunner 同一 runJob 路径：异常在内部收敛为终态 failed，永不 reject。
+ */
+export function startRunnerAwait(date: string, qid: string, job: JobRow, titleHint?: string): Promise<void> {
+  return runJob(date, qid, job, titleHint)
+}
+
 async function runJob(date: string, qid: string, job: JobRow, titleHint?: string): Promise<void> {
   const k = jobKey(date, qid)
   const controller = new AbortController()

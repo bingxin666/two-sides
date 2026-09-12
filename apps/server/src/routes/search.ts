@@ -17,7 +17,8 @@ import { SearchResp } from '@two-sides/contract'
 import { failResp, okData } from '../http'
 import { log } from '../log'
 import { cacheQuestionTitle } from '../repo'
-import { isLive, questionIdFromUrl, search, ZhihuError } from '../zhihu/client'
+import { isLive, questionIdFromUrl, search, ZhihuError, type ZhihuItem } from '../zhihu/client'
+import { expandQueries } from '../llm/expand'
 
 export const searchRoutes = new Hono()
 
@@ -65,7 +66,9 @@ searchRoutes.get('/search', async (c) => {
   const key = q.toLowerCase()
   const cached = lruGet(key)
   if (cached) {
-    log.debug('search.lru.hit', { count: cached.length })
+    // info 级：LRU 命中是验收要看的证据（省 zhihu_search 额度的直接证明），
+    // debug 级在默认 LOG_LEVEL=info 下不落盘
+    log.info('search.lru.hit', { count: cached.length })
     return okData(c, 200, SearchResp.parse({ items: cached }))
   }
 
@@ -75,10 +78,37 @@ searchRoutes.get('/search', async (c) => {
   }
 
   try {
-    // Count 上限 10：取一页足够挑出 ≤8 道去重后的题
-    const items = await search(q, 10)
+    // 查询生成：LLM 语义扩写（原句 + ≤3 相似问法，3s 超时护栏，失败退回仅原句），
+    // 与管线 fetchAnswers 同一 expandQueries —— 用户输入流与预生成/懒生成同路径
+    const queries = await expandQueries(q, { timeoutMs: 3_000 })
+
+    // 多查询执行：单查询失败不阻塞其余（≥1 个成功即可），条目按 ContentID/Url 去重
+    const seen = new Set<string>()
+    const merged: ZhihuItem[] = []
+    let lastError: unknown = null
+    let okCount = 0
+    for (const v of queries) {
+      try {
+        // Count 上限 10：每查询一页，合并后足够挑出 ≤8 道去重后的题
+        for (const it of await search(v, 10)) {
+          const k = (it.ContentID ?? '').trim() || (it.Url ?? '').trim()
+          if (!k || seen.has(k)) continue
+          seen.add(k)
+          merged.push(it)
+        }
+        okCount++
+      } catch (e) {
+        lastError = e
+        log.warn('search.query.failed', {
+          query: v.slice(0, 80),
+          reason: e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120),
+        })
+      }
+    }
+    if (okCount === 0) throw lastError ?? new ZhihuError('all search queries failed', 'zhihu_error', true)
+
     const byQuestion = new Map<string, string>()
-    for (const it of items) {
+    for (const it of merged) {
       const qid = questionIdFromUrl(it.Url ?? '')
       const title = it.Title ? cleanCandidateTitle(it.Title) : ''
       if (!qid || title.length < 4 || byQuestion.has(qid)) continue

@@ -10,6 +10,7 @@
     "build": "bun build --target=bun --outdir dist src/index.ts",
     "typecheck": "tsc --noEmit",
     "seed": "bun run src/seed.ts",
+    "pregenerate:run": "bun run src/pregenerate-run.ts",
     "pipeline:test": "bun run src/pipeline-test.ts"
   },
   "dependencies": {

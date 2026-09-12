@@ -259,3 +259,13 @@ function isAbortError(e: unknown): boolean {
     (typeof e === 'object' && e !== null && (e as { name?: string }).name === 'AbortError')
   )
 }
+
+/** 模型偶尔会用 ```json 围栏，剥掉再 parse（agents/llm callJson 与 llm/expand 共用） */
+export function parseJsonLoose(raw: string): unknown {
+  const trimmed = raw.trim()
+  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed)
+  const body = fenced?.[1] ?? trimmed
+  const start = body.search(/[[{]/)
+  const json = start > 0 ? body.slice(start) : body
+  return JSON.parse(json)
+}

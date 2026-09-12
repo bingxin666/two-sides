@@ -17,7 +17,8 @@
 
 import { z } from 'zod'
 import { callAgent } from '../llm/provider'
-import { llmCounters, type ChatMessage } from '../llm/client'
+import { llmCounters, parseJsonLoose, type ChatMessage } from '../llm/client'
+import { expandQueries } from '../llm/expand'
 import { log } from '../log'
 import { isLive, normalizeAuthority, questionIdFromUrl, search, ZhihuError, zhihuCounters, type ZhihuItem } from '../zhihu/client'
 import { resolveQuestionTitle, rememberHint } from '../zhihu/title'
@@ -95,16 +96,7 @@ const LIUKANSHAN_SCENE = [
 const LIUKANSHAN_SYSTEM = `${LIUKANSHAN_PERSONA}\n\n${LIUKANSHAN_SCENE}`
 
 /* --------------------------- JSON 宽松解析 --------------------------- */
-
-/** 模型偶尔会用 ```json 围栏，剥掉再 parse */
-function parseJsonLoose(raw: string): unknown {
-  const trimmed = raw.trim()
-  const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed)
-  const body = fenced?.[1] ?? trimmed
-  const start = body.search(/[[{]/)
-  const json = start > 0 ? body.slice(start) : body
-  return JSON.parse(json)
-}
+// parseJsonLoose 已移至 llm/client.ts（agents/llm 与 llm/expand 共用）
 
 /* ------------------------------ 内容获取 ------------------------------ */
 
@@ -124,39 +116,6 @@ function answerIdFromUrl(url: string): string | null {
 function truncate(s: string, max: number): string {
   const t = s.trim()
   return t.length <= max ? t : `${t.slice(0, max)}…`
-}
-
-/**
- * 8 个 Query 变体（2026-09-12 拍板：3→5→8，8 是终点不再扩）。
- * 方向（team-lead 指定）：原句 / 核心争议改写 / 对立面改写 / 下属具体场景 /
- * 泛化措辞 / 数字对比类 / 极端个案类 / 相关人群类 —— 后三个是对「模糊搜索
- * 带进外题」的对冲：更精确的措辞会提高本题命中率（配合 fetchAnswers 的
- * URL 强校验兜底）。
- * 8/题 × 30 题 = 240 次/日，预生成预算内（额度实测 4965/5000）。
- * 单次 Count 上限 10，靠变体扩容后按 answerId 去重合并。
- */
-function buildVariants(question: string): string[] {
-  const t = question.trim()
-  if (!t) return []
-  // 泛化措辞的机械实现：取首个标点前的短段（问句的细化尾巴常是外题漂移源）
-  const general = t.split(/[，,。？?！!、]/, 1)[0]?.trim() ?? ''
-  const candidates = [
-    t, // 原句
-    `${t} 争议`, // 核心争议改写
-    `${t} 反对`, // 对立面改写：把反方一侧的内容拉进内容池
-    `${t} 场景`, // 下属具体场景
-    general, // 泛化措辞
-    `${t} 数据`, // 数字对比类
-    `${t} 个案`, // 极端个案类
-    `${t} 专家`, // 相关人群类
-  ]
-  // 去重去空；泛化段/短问句可能过短，不足 8 字不单独成查询（防全网漂移）
-  const out: string[] = []
-  for (const v of candidates) {
-    const s = v.trim()
-    if (s.length >= 8 && !out.includes(s)) out.push(s)
-  }
-  return out.length > 0 ? out : [t]
 }
 
 /* ------------------------ 薄样本救援合并（2026-09-12 用户拍板） ------------------------ */
@@ -531,8 +490,9 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       if (ctx.titleHint?.trim()) rememberHint(qid, ctx.titleHint)
 
       const question = title
-      const variants = buildVariants(question)
-      if (variants.length === 0) variants.push(qid)
+      // ② 查询生成：LLM 语义扩写（原句 + ≤3 个相似问法，2026-09-12 用户拍板，
+      //    替代已删除的 8 个机械后缀变体）。扩写失败/超时 → 退回仅原句（expand.degraded）。
+      const variants = await expandQueries(question, { signal: ctx.signal })
 
       // ② 变体搜索 + 按 answerId 去重
       const items = await searchDedup(variants, ctx)

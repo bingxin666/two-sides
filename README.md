@@ -90,6 +90,8 @@ VITE_API_MODE=mock      # 前端读本地 fixture，不碰真实接口
 ```bash
 ZHIHU_ACCESS_SECRET=...   # 知乎开放平台 → 申请新 Access Secret
 DEEPSEEK_API_KEY=...      # 管线主力模型
+ZHIHU_LIVE=1              # ⚠️ 与下一行必须成对设置
+PIPELINE_MODE=llm         # ⚠️ 漏了会静默跑成 fake 数据（见环境变量表警告）
 VITE_API_MODE=live
 VITE_API_BASE=/api/v1
 ```
@@ -141,15 +143,17 @@ pnpm build      # 全 workspace 构建
 | `ZHIDUAN_DB_PATH` | 可选 | `./data/two-sides.db` | SQLite 单文件路径 |
 | `ZHIHU_ZHIDA_MODEL` | 可选 | `zhida-thinking-1p5` | 直答模型档位 |
 | `PROVIDERS_CONFIG` | 可选 | `config/providers.yaml` | 服务商与 Agent 绑定配置路径 |
-| `INTERNAL_TOKEN` | 条件 | — | 预生成内部口（`POST /internal/pregenerate`）的校验 token：**不走 Caddy、不对外**，可达面仅容器内 + 宿主 localhost；timing-safe 校验，不匹配或未配置一律 404（端点禁用）。运维手动触发预生成时用 |
+| `PREGENERATE_TOP` | 可选 | `30` | 每日预生成题数上限（热榜取前 N 题） |
 | `ANALYSIS_RETRY_COOLDOWN_SEC` | 可选 | `60` | `failed` 后再试的冷却窗口，防连点打穿额度 |
 | `ANALYSIS_JOB_TIMEOUT_SEC` | 可选 | `180` | 单 job 总时限，超时置 `timeout` |
 | `LLM_RPM_LIMIT` | 可选 | `60` | 全局令牌桶，防打爆 LLM 与知乎限频 |
-| `ZHIHU_LIVE` | 可选 | `0` | **安全开关**：只有 `=1` 且凭证已配置才允许真实知乎调用，默认严禁消耗黑客松日额度 |
-| `PIPELINE_MODE` | 可选 | `fake` | `fake` 走本地确定性管线（不调 LLM，适合联调与演练）/ `llm` 走真实多智能体管线 |
+| `ZHIHU_LIVE` | 可选 | `0` | **安全开关**：只有 `=1` 且凭证已配置才允许真实知乎调用，默认严禁消耗黑客松日额度。**必须与 `PIPELINE_MODE=llm` 成对设置**（见下方警告） |
+| `PIPELINE_MODE` | 可选 | `fake` | `fake` 走本地确定性管线（不调 LLM，适合联调与演练）/ `llm` 走真实多智能体管线。**必须与 `ZHIHU_LIVE=1` 成对设置**（见下方警告） |
 | `PIPELINE_FAKE_DURATION_MS` | 可选 | `12000` | fake 管线的模拟时长，留足时间观察轮询与 T1 进度态 |
 | `RECOVER_ON_BOOT` | 可选 | `true` | 启动时是否重放上一轮未完成的 job |
 | `ORIGAMI_API_KEY` | 可选 | — | `providers.yaml` 中中转服务商 `origami` 的 key |
+
+> ⚠️ **`ZHIHU_LIVE=1` 与 `PIPELINE_MODE=llm` 必须成对设置**。只设前者漏了后者，管线会**静默跑成 fake**：请求正常返回、快照正常落库，但 `question` 字段带「（fake 数据 · D0）」标注、12 秒出结果——且 fake 快照会占用当日 `{日期}:{qid}` 主键，真实数据要靠 `POST ?force=1` 才能覆盖。上线检查清单里这是必查项。
 
 **增强层（OAuth）—— 凭证未获批时整层不启用，不影响主流程**：`ZHIHU_OAUTH_APP_ID`、`ZHIHU_OAUTH_APP_KEY`、`ZHIHU_OAUTH_REDIRECT_URI`。
 
@@ -187,16 +191,18 @@ pnpm build      # 全 workspace 构建
 ```bash
 cp .env.example .env          # 填入真实值
 pnpm install
-pnpm -F @two-sides/web build    # 产出 apps/web/dist（Caddy 挂载）
+# 前端构建期变量：产品线上为 live 模式（mock 仅为离线应急）
+VITE_API_MODE=live VITE_API_BASE=/api/v1 pnpm -F @two-sides/web build   # 产出 apps/web/dist（Caddy 挂载）
 pnpm -F @two-sides/server build # 产出 apps/server/dist/index.js（server 镜像 COPY）
 docker compose up -d --build
 ```
 
 - `web` 监听 `127.0.0.1:8080`，Caddy 托管静态产物并反代 `/api/*` → `server:3000`
 - `server` 不对外暴露端口；SQLite 落在具名卷 `two-sides-server-data`
-- **每日预生成（cron）采用进程内定时器**（每日 `Asia/Shanghai 00:30`）；另有运维手动触发口 `POST /internal/pregenerate`（需 `INTERNAL_TOKEN`，**不走 Caddy 不对外**，未配置 token 时端点整体禁用）。端点实现前快照由懒生成路径（`GET /analysis` 未命中即隐式触发）自然填充，落地后同样秒开
+- **每日预生成（cron）为进程内定时器**（每日 `Asia/Shanghai 00:30`，取热榜前 `PREGENERATE_TOP` 题），无外部 crontab、无内部触发端点；端点未实现前快照由懒生成路径（`GET /analysis` 未命中即隐式触发）自然填充，落地后同样秒开
 - **TLS / 对外反代不归 compose 管**：自行部署反代指向 `127.0.0.1:8080` 终止 HTTPS
 - 秒开验收标准：热榜页与预置题 **TTFB < 200ms、渲染路径无任何实时生成调用**
+- ⚠️ **上线检查**：`.env` 里 `ZHIHU_LIVE=1` 与 `PIPELINE_MODE=llm` 必须成对设置（详见环境变量表警告）——只设一个会静默跑成 fake 数据并占住当日快照主键
 
 ---
 
