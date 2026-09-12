@@ -10,6 +10,7 @@ import { storeToRefs } from 'pinia'
 import { useAnalysisStore } from '@/stores/analysis'
 import VeilGlass from '@/components/veil/VeilGlass.vue'
 import PinRail from '@/components/question/PinRail.vue'
+import ExpandedPanel from '@/components/question/ExpandedPanel.vue'
 import T1Progress from '@/components/status/T1Progress.vue'
 import FailedCard from '@/components/status/FailedCard.vue'
 
@@ -35,6 +36,13 @@ const title = computed(() => {
   if (phase.value === 'failed') return '这个问题今天没能生成'
   return '正在获取问题…'
 })
+
+const selectedJudgment = computed(
+  () => analysis.value?.judgments.find((j) => j.id === selectedJudgmentId.value) ?? null,
+)
+
+// 选中观点后，光幕收起并显示该观点详情；列表本身始终通过左右按钮横向浏览。
+const veilHeight = computed(() => (selectedJudgment.value ? 300 : 600))
 
 /**
  * 薄样本救援合并的透明标注（契约 mergedQuestions，optional 防御）：
@@ -68,6 +76,11 @@ function onSelect(id: string) {
   const next = selectedJudgmentId.value === id ? null : id
   store.select(next)
   syncQuery(next)
+}
+
+function onClose() {
+  store.select(null)
+  syncQuery(null)
 }
 
 function goHome() {
@@ -130,8 +143,8 @@ watch(
       </p>
     </header>
 
-    <VeilGlass :height="600">
-      <!-- 判断以横向轨道呈现；详情不再展开到光幕下方 -->
+    <VeilGlass :height="veilHeight">
+      <!-- 判断以横向轨道呈现；选中后在下方显示对应详情 -->
       <PinRail
         v-if="analysis && !isGenerating"
         :judgments="analysis.judgments"
@@ -154,6 +167,13 @@ watch(
 
       <p v-else-if="phase === 'ready'" class="qbody__empty">这个问题今天还没有可用的判断</p>
     </div>
+
+    <ExpandedPanel
+      v-if="selectedJudgment"
+      :key="selectedJudgment.id"
+      :judgment="selectedJudgment"
+      @close="onClose"
+    />
 
   </div>
 </template>
