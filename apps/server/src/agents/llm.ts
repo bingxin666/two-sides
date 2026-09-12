@@ -24,6 +24,7 @@ import { isLive, normalizeAuthority, questionIdFromUrl, search, ZhihuError, zhih
 import { resolveQuestionTitle, rememberHint } from '../zhihu/title'
 import {
   delay,
+  type ExtractedJudgment,
   MergedQuestionInfo,
   PipelineError,
   type MergedJudgment,
@@ -363,6 +364,91 @@ function quoteMatchesExtracted(quote: string, extractedQuote: string): boolean {
   return head.length >= 6 && b.includes(head)
 }
 
+/**
+ * 将 merge 模型的候选结果还原为可追溯的判断。
+ *
+ * 这个步骤刻意保持为纯函数：模型可能漏填 answerIds/sourceQuotes，或者把一条
+ * 回答中的多个判断压成一个结果。我们先用原话保守反查来源，再为没有被任何
+ * merge 结果覆盖的抽取判断保留少量 fallback，避免少数派在归类时静默消失。
+ */
+export interface MergeCandidate {
+  text: string
+  sourceQuotes?: string[]
+  answerIds?: string[]
+}
+
+export function normalizeMergedJudgments(
+  items: ExtractedJudgment[],
+  candidates: MergeCandidate[],
+  maxJudgments = 15,
+  maxFallbacks = 5,
+): MergedJudgment[] {
+  const known = new Set(items.map((i) => i.answerId))
+  const modelMerged: MergedJudgment[] = candidates
+    .map((j, i) => {
+      const explicitIds = (j.answerIds ?? []).filter((id) => known.has(id))
+      const sourceQuotes = (j.sourceQuotes ?? []).slice(0, 4)
+      const inferredIds = sourceQuotes.flatMap((sourceQuote) => {
+        const matches = items.filter((item) => quoteMatchesExtracted(sourceQuote, item.quote))
+        // 若模型显式给了 answerIds，sourceQuote 的同文匹配只能在这些来源内
+        // 反查；否则同一句短引文出现在多个回答时会错误扩大归属。
+        const constrained = explicitIds.length > 0
+          ? matches.filter((item) => explicitIds.includes(item.answerId))
+          : matches
+        return (constrained.length > 0 ? constrained : matches).map((item) => item.answerId)
+      })
+      return {
+        id: `j${i + 1}`,
+        text: j.text,
+        sourceQuotes,
+        answerIds: [...new Set([...explicitIds, ...inferredIds])],
+      }
+    })
+    .filter((j) => j.answerIds.length > 0 || j.sourceQuotes.some((quote) =>
+      items.some((item) => quoteMatchesExtracted(quote, item.quote)),
+    ))
+
+  const covered = new Set<string>()
+  for (const merged of modelMerged) {
+    const quoteLinkedKeys = new Set<string>()
+    for (const quote of merged.sourceQuotes) {
+      const matches = items.filter((item) => quoteMatchesExtracted(quote, item.quote))
+      const constrained = merged.answerIds.length > 0
+        ? matches.filter((item) => merged.answerIds.includes(item.answerId))
+        : matches
+      const candidatesForQuote = constrained.length > 0 ? constrained : matches
+      if (candidatesForQuote.length === 1) {
+        const item = candidatesForQuote[0]!
+        quoteLinkedKeys.add(`${item.answerId}\u0000${item.text}`)
+      }
+    }
+    for (const item of items) {
+      const quoteLinked = quoteLinkedKeys.has(`${item.answerId}\u0000${item.text}`)
+      // 仅 answerId 时只认同一答主的一个判断，不能误把该回答的其它判断吞掉。
+      const idOnlyLinked = !quoteLinked && merged.answerIds.includes(item.answerId) &&
+        ![...covered].some((key) => key.startsWith(`${item.answerId}\u0000`))
+      if (quoteLinked || idOnlyLinked) covered.add(`${item.answerId}\u0000${item.text}`)
+    }
+  }
+
+  const orphanFallbacks: MergedJudgment[] = []
+  for (const item of items) {
+    const key = `${item.answerId}\u0000${item.text}`
+    if (covered.has(key)) continue
+    orphanFallbacks.push({
+      id: `jfallback${orphanFallbacks.length + 1}`,
+      text: item.text,
+      sourceQuotes: [item.quote],
+      answerIds: [item.answerId],
+    })
+  }
+  const fallbackBudget = Math.min(orphanFallbacks.length, maxFallbacks, maxJudgments)
+  return [
+    ...modelMerged.slice(0, Math.max(0, maxJudgments - fallbackBudget)),
+    ...orphanFallbacks.slice(0, fallbackBudget),
+  ]
+}
+
 /* ---------------------------- 02 归并 Agent ---------------------------- */
 
 const MergeOut = z.object({
@@ -611,89 +697,10 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       }))
       const out = await callJson('merge', MergeOut, MERGE_SYSTEM, payload, ctx, 'merge', 120_000)
 
-      const known = new Set(items.map((i) => i.answerId))
-      const modelMerged: MergedJudgment[] = (out.judgments ?? [])
-        .map((j, i) => {
-          // answerIds 只认输入里出现过的 id，防编造；模型漏填时从 sourceQuotes 反查补齐。
-          const explicitIds = (j.answerIds ?? []).filter((id) => known.has(id))
-          const inferredIds = (j.sourceQuotes ?? []).flatMap((sourceQuote) =>
-            items
-              .filter((item) => quoteMatchesExtracted(sourceQuote, item.quote))
-              .map((item) => item.answerId),
-          )
-          const ids = [...new Set([...explicitIds, ...inferredIds])]
-          return {
-            id: `j${i + 1}`,
-            text: j.text,
-            sourceQuotes: (j.sourceQuotes ?? []).slice(0, 4),
-            answerIds: ids,
-          }
-        })
-        // 丢弃完全无法追溯到抽取判断的模型条目。保留这种条目会让 orient
-        // 退化为全池投票，既可能污染观点，也会挤掉可追溯的少数派保底项。
-        .filter((j) => j.answerIds.length > 0 || j.sourceQuotes.some((quote) =>
-          items.some((item) => quoteMatchesExtracted(quote, item.quote)),
-        ))
-      // 契约建议 10–15 条：保持模型给出的重要性顺序，但不要让模型
-      // 静默丢掉某个独立判断。尤其是一条回答里拆出的第二个主张、少数派
-      // 反例，若既没有 answerId 也没有 sourceQuotes 被任何结果覆盖，之前
-      // 会在这里永久消失，导致“尽可能多展示分歧”失效。
-      const covered = new Set<string>()
-      for (const merged of modelMerged) {
-        // 相同的短句可能出现在多个回答中；只有唯一命中，或 answerIds
-        // 能把命中范围缩到唯一回答时，sourceQuote 才能建立可靠归属。
-        const quoteLinkedKeys = new Set<string>()
-        for (const quote of merged.sourceQuotes) {
-          const matches = items.filter((item) => quoteMatchesExtracted(quote, item.quote))
-          const constrained = merged.answerIds.length > 0
-            ? matches.filter((item) => merged.answerIds.includes(item.answerId))
-            : matches
-          const candidates = constrained.length > 0 ? constrained : matches
-          if (candidates.length === 1) {
-            const item = candidates[0]!
-            quoteLinkedKeys.add(`${item.answerId}\u0000${item.text}`)
-          }
-        }
-        for (const item of items) {
-          // sourceQuotes 是判断级别的精确归属；仅有 answerId 时，如果一条
-          // 回答拆出了多个判断，不能把它们全部标成已覆盖，否则模型漏掉的
-          // 第二个主张仍会被静默吞掉。只有该答主尚未被本结果覆盖时，
-          // answerId 才足以建立一个保守归属。
-          const quoteLinked = quoteLinkedKeys.has(`${item.answerId}\u0000${item.text}`)
-          // 若模型只给 answerId 而没有 sourceQuotes，只能保守地把该答主
-          // 的一个判断视为已覆盖；其余同答主判断会进入 orphanFallbacks，
-          // 避免一条归并结果误标掉整篇回答的多个独立主张。
-          const idOnlyLinked = !quoteLinked && merged.answerIds.includes(item.answerId) &&
-            ![...covered].some((key) => key.startsWith(`${item.answerId}\u0000`))
-          const linked = quoteLinked || idOnlyLinked
-          if (linked) covered.add(`${item.answerId}\u0000${item.text}`)
-        }
-      }
-      const orphanFallbacks: MergedJudgment[] = []
-      for (const item of items) {
-        const key = `${item.answerId}\u0000${item.text}`
-        if (covered.has(key)) continue
-        orphanFallbacks.push({
-          id: `jfallback${orphanFallbacks.length + 1}`,
-          text: item.text,
-          sourceQuotes: [item.quote],
-          answerIds: [item.answerId],
-        })
-      }
-      // 为未覆盖的细分判断预留少量席位；否则模型一旦输出满 15 条，
-      // 保底项仍会在 slice 时全部消失。最多预留 5 个，避免回退项挤掉
-      // 模型已排序的主要议题。
-      const fallbackBudget = Math.min(orphanFallbacks.length, 5)
-      const out2 = [
-        ...modelMerged.slice(0, Math.max(0, 15 - fallbackBudget)),
-        ...orphanFallbacks.slice(0, fallbackBudget),
-      ]
-      if (orphanFallbacks.length > 0) {
-        ctx.note('merge.orphan_preserved', {
-          modelJudgments: modelMerged.length,
-          preserved: fallbackBudget,
-          droppedByLimit: Math.max(0, orphanFallbacks.length - fallbackBudget),
-        })
+      const out2 = normalizeMergedJudgments(items, out.judgments ?? [])
+      const orphanCount = out2.filter((item) => item.id.startsWith('jfallback')).length
+      if (orphanCount > 0) {
+        ctx.note('merge.orphan_preserved', { preserved: orphanCount })
       }
       // 服务端定 id：模型只负责内容，id 由我们保证唯一与稳定
       return out2
