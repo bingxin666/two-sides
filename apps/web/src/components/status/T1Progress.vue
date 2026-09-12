@@ -32,7 +32,9 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
 <template>
   <section class="t1">
     <div class="t1__inner">
-      <p class="t1__lead">正在从 {{ sampleCount }} 条回答中提炼判断</p>
+      <!-- sampleCount 未就绪时诚实降级，不显示「从 0 条回答」 -->
+      <p v-if="sampleCount > 0" class="t1__lead">正在从 {{ sampleCount }} 条回答中提炼判断</p>
+      <p v-else class="t1__lead">正在检索相关回答</p>
 
       <ol class="t1__stages">
         <li

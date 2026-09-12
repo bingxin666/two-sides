@@ -4,7 +4,7 @@
  *   200 → N2 钉子列表；202 generating/pending → T1；202 failed → 失败卡片；展开 → N3（同路由）
  * 刷新用 URL query ?j=<judgmentId> 恢复展开态
  */
-import { computed, onMounted, watch } from 'vue'
+import { computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAnalysisStore } from '@/stores/analysis'
@@ -71,6 +71,11 @@ function onRetry() {
 // 首屏加载；换题时重置再拉
 onMounted(() => {
   if (qid.value) void store.load(qid.value)
+})
+
+// 离开页面即停本轮轮询（后端任务不中断，§6.3）
+onUnmounted(() => {
+  store.cancelPolling()
 })
 
 watch(qid, (id, prev) => {
