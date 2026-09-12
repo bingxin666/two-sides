@@ -16,14 +16,16 @@ const root = ref<HTMLElement | null>(null)
 const strip = ref(0)
 let ro: ResizeObserver | null = null
 
-const STRIP_MAX = 118
-const STRIP_MIN = 64
+// The reference uses a fine curtain (roughly 50–70 slats on desktop).
+// Keep the rhythm responsive while avoiding oversized bands on narrow screens.
+const STRIP_MAX = 28
+const STRIP_MIN = 14
 
 function measure(width: number) {
   if (!width) return
-  const desired = Math.min(STRIP_MAX, Math.max(STRIP_MIN, width * 0.12))
-  const count = Math.min(24, Math.max(3, Math.round(width / desired)))
-  strip.value = Math.max(32, Math.floor(width / count))
+  const desired = Math.min(STRIP_MAX, Math.max(STRIP_MIN, width * 0.018))
+  const count = Math.min(96, Math.max(12, Math.round(width / desired)))
+  strip.value = Math.max(12, Math.floor(width / count))
 }
 
 onMounted(() => {
@@ -65,17 +67,22 @@ const style = computed<Record<string, string>>(() => {
   position: relative;
   width: 100%;
   overflow: hidden;
-  /* JS 未接管时的兜底（设计稿线索：min(118px, 12vw)） */
-  --strip: min(118px, 12vw);
+  /* JS 未接管时的兜底：细密竖片，与设计稿的节奏一致 */
+  --strip: clamp(14px, 1.8vw, 28px);
   transition: height .5s cubic-bezier(.22, .61, .36, 1);
   isolation: isolate;
+  background: #f7f5f0;
+  border-top: 1px solid rgba(255, 255, 255, .8);
+  border-bottom: 1px solid rgba(255, 255, 255, .72);
+  box-shadow: inset 0 18px 28px rgba(255, 255, 255, .18), inset 0 -22px 34px rgba(255, 255, 255, .24);
 }
 
 /* 层 1 · 光谱底：两端全饱和、中间消饱和 */
 .veil__base {
   position: absolute;
   inset: 0;
-  opacity: .58;
+  opacity: .72;
+  filter: saturate(1.08) contrast(.96);
   background: linear-gradient(90deg,
       #3C6B8A 0%, #5B7A8D 12.5%, #7A8A90 25%, #979D9A 37.5%,
       #B4B0A5 50%, #B8A585 62.5%, #BC9A67 75%, #B08750 87.5%, #A57439 100%);
@@ -92,20 +99,21 @@ const style = computed<Record<string, string>>(() => {
 .veil__cut {
   background: repeating-linear-gradient(90deg,
       transparent 0,
-      transparent calc(var(--strip) - 2px),
-      rgba(255, 255, 255, .92) calc(var(--strip) - 2px),
-      rgba(255, 255, 255, .92) var(--strip));
+      transparent calc(var(--strip) - 1px),
+      rgba(255, 255, 255, .76) calc(var(--strip) - 1px),
+      rgba(255, 255, 255, .76) var(--strip));
+  filter: blur(.15px);
 }
 
 /* 层 3 · 高光边：每片玻璃左侧受光、右侧压深一点，制造厚度而不断裂 */
 .veil__gloss {
   background: repeating-linear-gradient(90deg,
-      rgba(255, 255, 255, .40) 0,
-      rgba(255, 255, 255, .10) 2px,
-      rgba(255, 255, 255, 0) 12px,
-      rgba(255, 255, 255, 0) calc(var(--strip) - 14px),
-      rgba(28, 27, 25, .05) calc(var(--strip) - 3px),
-      rgba(28, 27, 25, .05) calc(var(--strip) - 2px));
+      rgba(255, 255, 255, .48) 0,
+      rgba(255, 255, 255, .14) 2px,
+      rgba(255, 255, 255, 0) 30%,
+      rgba(255, 255, 255, 0) 76%,
+      rgba(30, 32, 34, .11) calc(var(--strip) - 2px),
+      rgba(30, 32, 34, .03) var(--strip));
 }
 
 /* 层 4 · TopSheen：上沿反光（600 高时约 78px） */
@@ -115,8 +123,8 @@ const style = computed<Record<string, string>>(() => {
   top: 0;
   left: 0;
   right: 0;
-  height: 13%;
-  background: linear-gradient(180deg, rgba(255, 255, 255, .34), rgba(255, 255, 255, 0));
+  height: clamp(44px, 13%, 80px);
+  background: linear-gradient(180deg, rgba(255, 255, 255, .5), rgba(255, 255, 255, .12) 46%, rgba(255, 255, 255, 0));
   pointer-events: none;
 }
 
@@ -126,8 +134,9 @@ const style = computed<Record<string, string>>(() => {
   position: absolute;
   inset: 0;
   background: linear-gradient(180deg,
-      #FFF 0%, rgba(255, 255, 255, 0) 34%,
-      rgba(255, 255, 255, 0) 66%, #FFF 100%);
+      rgba(255, 255, 255, .98) 0%, rgba(255, 255, 255, .18) 13%,
+      rgba(255, 255, 255, 0) 28%, rgba(255, 255, 255, 0) 72%,
+      rgba(255, 255, 255, .2) 87%, rgba(255, 255, 255, .98) 100%);
   pointer-events: none;
 }
 
