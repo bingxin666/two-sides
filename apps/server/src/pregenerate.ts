@@ -13,7 +13,7 @@
  *   - 全程走 ZHIHU_LIVE 闸：hotList 自带闸，闸关时 cron tick 只记日志不硬跑
  *   - 每批 hot_list 1 次额度；搜索/LLM 走既有管线，LLM_RPM_LIMIT 令牌桶全局生效，
  *     变体间 300ms 间隔（fetchAnswers 内）原样适用
- *   - 批内小并发（≤2，PREGENERATE_CONCURRENCY），跑完一批再放下一批，不打爆搜索限频
+ *   - 批内并发（≤4，PREGENERATE_CONCURRENCY），跑完一批再放下一批，不打爆搜索限频
  *   - 单题失败 → 该题终态 failed，批次继续（docs/01 §4.1 原话：标记为失败并继续处理后续题目）
  *   - 已 ready 的题幂等跳过；INSERT 竞争失败（他处持有）不抢不重跑（§6.3 同路径）
  */
@@ -26,7 +26,7 @@ import { startRunnerAwait, tryAcquire } from './jobs'
 import { nowIso, todayKey } from './time'
 
 /** 批内并发度：4；搜索与 LLM 各自仍受客户端限流/令牌桶约束 */
-const PREGENERATE_CONCURRENCY = 4
+const PREGENERATE_CONCURRENCY = env.PREGENERATE_CONCURRENCY
 
 /** 剥掉站点后缀（与 routes/search.ts 同口径；实测 hot_list 标题一般已无后缀，防御性保留） */
 function cleanHotTitle(raw: string): string {

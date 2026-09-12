@@ -26,12 +26,13 @@ import {
   type RawAnswer,
 } from './agents/types'
 import { log } from './log'
+import { env } from './env'
 
 /** 01 提取：每批回答数（docs/03 §4.1：3–5 条） */
 const EXTRACT_BATCH_SIZE = 4
-const EXTRACT_CONCURRENCY = 8
+const EXTRACT_CONCURRENCY = env.PIPELINE_EXTRACT_CONCURRENCY
 /** 03 取向并发 */
-const ORIENT_CONCURRENCY = 12
+const ORIENT_CONCURRENCY = env.PIPELINE_ORIENT_CONCURRENCY
 
 /**
  * 综述降级计数（进程内累计，评审期观察降化率；也可挂到 /health 之外的诊断口）。
