@@ -98,7 +98,8 @@ export const env = {
   /** 单 job 总时限（秒），超时置 timeout */
   JOB_TIMEOUT_SEC: num('ANALYSIS_JOB_TIMEOUT_SEC', 180),
   /** 全局 LLM 令牌桶（req/min） */
-  LLM_RPM_LIMIT: num('LLM_RPM_LIMIT', 60),
+  /** 全局 LLM 令牌桶上限；并发由各阶段信号量控制，令牌桶负责总吞吐 */
+  LLM_RPM_LIMIT: num('LLM_RPM_LIMIT', 300),
 
   /**
    * 是否允许真实知乎调用。默认 false —— D0 绝不能消耗黑客松日额度。

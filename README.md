@@ -146,7 +146,7 @@ pnpm build      # 全 workspace 构建
 | `PREGENERATE_TOP` | 可选 | `30` | 每日预生成题数上限（热榜取前 N 题） |
 | `ANALYSIS_RETRY_COOLDOWN_SEC` | 可选 | `60` | `failed` 后再试的冷却窗口，防连点打穿额度 |
 | `ANALYSIS_JOB_TIMEOUT_SEC` | 可选 | `180` | 单 job 总时限，超时置 `timeout` |
-| `LLM_RPM_LIMIT` | 可选 | `60` | 全局令牌桶，防打爆 LLM 与知乎限频 |
+| `LLM_RPM_LIMIT` | 可选 | `300` | 全局令牌桶；提取/取向默认并发提高后，仍以此限制总请求速率，可按服务商承载调低 |
 | `ZHIHU_LIVE` | 可选 | `1` | 只有 `=1` 且凭证已配置才允许真实知乎调用；未开启或未配置时直接返回错误。生产应与 `PIPELINE_MODE=llm` 一起设置。 |
 | `PIPELINE_MODE` | 可选 | `llm` | `llm` 走真实多智能体管线；`fake` 仅在显式指定时走本地确定性管线。未配置时默认 `llm`，非法值直接拒绝启动。 |
 | `PIPELINE_FAKE_DURATION_MS` | 可选 | `12000` | fake 管线的模拟时长，留足时间观察轮询与 T1 进度态 |

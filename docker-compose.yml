@@ -95,7 +95,7 @@ services:
       PREGENERATE_TOP: ${PREGENERATE_TOP:-30}
       ANALYSIS_RETRY_COOLDOWN_SEC: ${ANALYSIS_RETRY_COOLDOWN_SEC:-60}
       ANALYSIS_JOB_TIMEOUT_SEC: ${ANALYSIS_JOB_TIMEOUT_SEC:-180}
-      LLM_RPM_LIMIT: ${LLM_RPM_LIMIT:-60}
+      LLM_RPM_LIMIT: ${LLM_RPM_LIMIT:-300}
     volumes:
       # 按日分析快照（hot_questions / analyses / jobs）——具名 volume，持久化
       - server-data:/app/data

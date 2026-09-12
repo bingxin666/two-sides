@@ -25,8 +25,8 @@ import { cacheQuestionTitle, getAnalysis, upsertHotQuestions } from './repo'
 import { startRunnerAwait, tryAcquire } from './jobs'
 import { nowIso, todayKey } from './time'
 
-/** 批内并发度：≤2，避免打爆 zhihu_search 限频（30001） */
-const PREGENERATE_CONCURRENCY = 2
+/** 批内并发度：4；搜索与 LLM 各自仍受客户端限流/令牌桶约束 */
+const PREGENERATE_CONCURRENCY = 4
 
 /** 剥掉站点后缀（与 routes/search.ts 同口径；实测 hot_list 标题一般已无后缀，防御性保留） */
 function cleanHotTitle(raw: string): string {

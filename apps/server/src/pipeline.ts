@@ -29,9 +29,9 @@ import { log } from './log'
 
 /** 01 提取：每批回答数（docs/03 §4.1：3–5 条） */
 const EXTRACT_BATCH_SIZE = 4
-const EXTRACT_CONCURRENCY = 4
+const EXTRACT_CONCURRENCY = 8
 /** 03 取向并发 */
-const ORIENT_CONCURRENCY = 6
+const ORIENT_CONCURRENCY = 12
 
 /**
  * 综述降级计数（进程内累计，评审期观察降化率；也可挂到 /health 之外的诊断口）。
