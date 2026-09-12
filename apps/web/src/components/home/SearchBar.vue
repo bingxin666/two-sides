@@ -180,6 +180,9 @@ watch(open, (v) => {
   display: flex;
   align-items: center;
   gap: 12px;
+  /* 撑满内容列：输入行与光幕/声明行同宽（1440 基准下输入框 ≈1200px），用户反馈"更长一些" */
+  flex: 1 1 auto;
+  width: 100%;
 }
 
 .search__field {
