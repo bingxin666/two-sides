@@ -13,12 +13,17 @@ import { ApiError } from '@/api/http'
 
 export type AnalysisPhase = 'idle' | 'loading' | 'generating' | 'ready' | 'failed'
 
-/** 轮询参数：基础间隔 1.4s，每 8 轮 ×1.3 退避，封顶 4s，最多 40 轮兜底 */
+/** 轮询参数：基础间隔 1.4s，每 8 轮 ×1.3 退避，封顶 4s */
 const POLL_BASE_MS = 1400
 const POLL_MAX_MS = 4000
 const POLL_BACKOFF_EVERY = 8
-const POLL_MAX_ROUNDS = 40
-/** 连续网络异常多少次后放弃（转成 failed-ish 提示，不再空转） */
+/**
+ * 总时限模型（不设轮数上限）：真实管线单题 60–150s+（极端 LLM 慢），5 分钟封顶。
+ * 超时只是前端停止等待（docs/03 §6.3「取消」语义）—— 后端任务继续跑，
+ * 快照落地后重进即秒开；用户点「重试」走 POST 幂等恢复轮询。
+ */
+const POLL_DEADLINE_MS = 5 * 60_000
+/** 连续网络异常多少次后放弃（转成 failed-ish 提示，不再空转）；任何一次成功即清零 */
 const MAX_NET_ERRORS = 5
 
 function makeError(code: ErrorCode): ProgressError {
@@ -32,6 +37,14 @@ function isSnapshot(res: Analysis | ProgressResp): res is Analysis {
 
 function isAbort(e: unknown): boolean {
   return e instanceof DOMException && e.name === 'AbortError'
+}
+
+/**
+ * zod 校验失败（真实 LLM 数据违反契约、或响应形状整体不对）是确定性错误：
+ * 同一快照重试结果相同，重试只是烧时间 —— 直接终态 parse_error，不进重试计数。
+ */
+function isContractViolation(e: unknown): boolean {
+  return e instanceof Error && e.name === 'ZodError'
 }
 
 export const useAnalysisStore = defineStore('analysis', () => {
@@ -51,6 +64,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
   let controller: AbortController | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let currentQid: string | null = null
+  let pollStartAt = 0
   let rounds = 0
   let netErrors = 0
   let polling = false
@@ -94,7 +108,8 @@ export const useAnalysisStore = defineStore('analysis', () => {
   function scheduleNext(qid: string, my: number): void {
     if (my !== generation) return
     rounds += 1
-    if (rounds > POLL_MAX_ROUNDS) {
+    // 总时限封顶：超过 5 分钟置 failed（timeout，可重试），不再让用户无限转
+    if (Date.now() - pollStartAt > POLL_DEADLINE_MS) {
       toFailed(makeError('timeout'))
       return
     }
@@ -136,6 +151,11 @@ export const useAnalysisStore = defineStore('analysis', () => {
       scheduleNext(qid, my)
     } catch (e) {
       if (my !== generation || isAbort(e)) return
+      // 契约违规（响应形状/字段值不对）：确定性错误，直接终态不重试
+      if (isContractViolation(e)) {
+        toFailed(makeError('parse_error'))
+        return
+      }
       netErrors += 1
       if (netErrors >= MAX_NET_ERRORS) {
         toFailed(errorFrom(e))
@@ -156,6 +176,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
     cancelPolling()
     const my = generation
     currentQid = qid
+    pollStartAt = Date.now()
     rounds = 0
     netErrors = 0
     analysis.value = null
@@ -173,6 +194,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
     cancelPolling()
     const my = generation
     currentQid = qid
+    pollStartAt = Date.now()
     rounds = 0
     netErrors = 0
     error.value = null
@@ -202,6 +224,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
   function reset(): void {
     cancelPolling()
     currentQid = null
+    pollStartAt = 0
     rounds = 0
     netErrors = 0
     phase.value = 'idle'
