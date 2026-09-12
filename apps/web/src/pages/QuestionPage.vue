@@ -41,6 +41,18 @@ const selectedJudgment = computed(
   () => analysis.value?.judgments.find((j) => j.id === selectedJudgmentId.value) ?? null,
 )
 
+/**
+ * 薄样本救援合并的透明标注（契约 mergedQuestions，optional 防御）：
+ * sampleCount 含合并样本，声明行必须同步说明；hover 列出来源提问，避免静默合并
+ */
+const mergedQuestions = computed(() => analysis.value?.mergedQuestions ?? [])
+const mergedCount = computed(() => mergedQuestions.value.length)
+const mergedTitles = computed(() =>
+  mergedQuestions.value
+    .map((m) => `· ${m.title}（${m.reason === 'same_title' ? '同题重定向' : '相关提问'}）`)
+    .join('\n'),
+)
+
 const veilHeight = computed(() => (selectedJudgment.value ? 300 : 600))
 
 function syncQuery(id: string | null) {
@@ -113,6 +125,11 @@ watch(
       <h1 class="qhead__title">{{ title }}</h1>
       <p v-if="analysis" class="qhead__meta">
         基于 {{ analysis.sampleCount }} 条回答 · {{ analysis.date }}
+        <span
+          v-if="mergedCount > 0"
+          class="qhead__merged"
+          :title="`样本合并自以下提问：\n${mergedTitles}`"
+        >（含 {{ mergedCount }} 个相关提问的回答）</span>
       </p>
     </header>
 
@@ -177,6 +194,11 @@ watch(
   font-family: var(--font-sans);
   font-size: 12px;
   line-height: 18px;
+  color: var(--muted);
+}
+
+/* 合并声明：与 meta 同级弱化，不抢「基于 N 条回答」主信息；hover tooltip 列出来源 */
+.qhead__merged {
   color: var(--muted);
 }
 

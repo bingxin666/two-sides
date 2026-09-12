@@ -67,9 +67,13 @@ export async function runPipeline(
   }
 
   /* ---------- 获取内容 ---------- */
-  const { question, answers } = await agents.fetchAnswers(ctx.qid, ctx)
+  const { question, answers, mergedQuestions } = await agents.fetchAnswers(ctx.qid, ctx)
   if (answers.length === 0) {
     throw new PipelineError('未取到任何回答', 'zhihu_error', 'extract', true)
+  }
+  if (mergedQuestions && mergedQuestions.length > 0) {
+    // 透明度义务（契约：禁止静默合并）：来源题清单原样写入快照，前端标注「已并入 N 个相关提问」
+    ctx.note('rescue.merged', { count: mergedQuestions.length, qids: mergedQuestions.map((m) => m.qid) })
   }
   ctx.report({ stage: 'extract', stageRatio: 0, sampleCount: answers.length, judgmentsDone: 0, judgmentsTotal: 0 })
 
@@ -212,6 +216,8 @@ export async function runPipeline(
     date: ctx.date,
     sampleCount: answers.length,
     judgments: judgmentsOut,
+    // 薄样本救援合并的来源题（一条都没并入就不写该字段，契约可选）
+    ...(mergedQuestions && mergedQuestions.length > 0 ? { mergedQuestions } : {}),
   }
 
   // 出库前校验：结构 + 计数口径（§5.2 的 9 条硬规则）

@@ -40,7 +40,7 @@ const ConfigSchema = z.object({
   agents: z.record(AgentSchema),
 })
 
-export type AgentName = 'extract' | 'merge' | 'orient' | 'summary' | 'summaryFallback'
+export type AgentName = 'extract' | 'merge' | 'orient' | 'rescue' | 'summary' | 'summaryFallback'
 
 /* ------------------------------- 加载 -------------------------------- */
 
@@ -117,7 +117,7 @@ export interface ResolvedTarget {
   path: 'primary' | 'fallback'
 }
 
-const REQUIRED_AGENTS: AgentName[] = ['extract', 'merge', 'orient', 'summary']
+const REQUIRED_AGENTS: AgentName[] = ['extract', 'merge', 'orient', 'rescue', 'summary']
 
 function resolveRef(
   reg: Registry,

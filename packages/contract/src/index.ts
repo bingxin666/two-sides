@@ -106,6 +106,24 @@ export const Analysis = z.object({
   sampleCount: z.number().int().nonnegative(),
   /** 10–15 条；participantCount === 0 的判断在后端就被丢弃，不出现在这里 */
   judgments: z.array(Judgment),
+  /**
+   * 薄样本救援合并的来源题清单（2026-09-12 产品决策，第六次契约演进）。
+   * 触发条件：主问题回答池 < 5 条时才启用（富题永不合并，爆炸半径锁死在老冷题）。
+   * 两级并入：① 标题归一化后逐字一致（知乎重定向缺失的同题重问）无条件并入；
+   * ② 相关题经批量 LLM 关卡裁决「是否同一场讨论」，上限 3 题。
+   * 强校验同步放宽为「回答 URL 含主 qid 或任一已批准合并 qid」，语义近似仍然禁止。
+   * 前端义务：存在此字段时声明行必须如实标注「已并入 N 个相关提问」—— 禁止静默合并。
+   */
+  mergedQuestions: z
+    .array(
+      z.object({
+        qid: z.string(),
+        title: z.string(),
+        reason: z.enum(['same_title', 'related']),
+      })
+    )
+    .max(4)
+    .optional(),
 })
 
 /* ============================================================

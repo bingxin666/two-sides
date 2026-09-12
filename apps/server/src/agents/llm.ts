@@ -23,6 +23,7 @@ import { isLive, normalizeAuthority, questionIdFromUrl, search, ZhihuError, zhih
 import { resolveQuestionTitle, rememberHint } from '../zhihu/title'
 import {
   delay,
+  MergedQuestionInfo,
   PipelineError,
   type MergedJudgment,
   type OrientedJudgment,
@@ -158,6 +159,146 @@ function buildVariants(question: string): string[] {
   return out.length > 0 ? out : [t]
 }
 
+/* ------------------------ 薄样本救援合并（2026-09-12 用户拍板） ------------------------ */
+
+/** 救援触发闸：主问题回答池 < 5 条才启用；富题永不合并（爆炸半径锁死在老冷题） */
+const RESCUE_THRESHOLD = 5
+/** Tier 2（LLM 裁决）并入上限 */
+const RESCUE_TIER2_MAX = 3
+/** 合并题总上限（含 Tier 1，契约 mergedQuestions max(4)） */
+const MERGE_MAX = 4
+
+/**
+ * 标题归一化（Tier 1 逐字比对的唯一口径）：
+ * 去「 - 知乎」后缀 → 全角转半角 → 统一引号 → 去标点/空白 → 小写。
+ * 只做机械归一，禁止任何语义近似 —— 判定权在逐字比对与显式 LLM 裁决。
+ */
+function normalizeTitle(raw: string): string {
+  return raw
+    .replace(/\s*[-–—]\s*知乎\s*$/u, '')
+    .toLowerCase()
+    .replace(/[Ａ-Ｚａ-ｚ０-９]/g, (c) => String.fromCharCode(c.charCodeAt(0) - 0xfee0))
+    .replace(/[“”„‟「」『』«»]/g, '"')
+    .replace(/[‘’‛‘]/g, "'")
+    .replace(/[？?！!。，,、：:；;·…\-—–_～~]/g, '')
+    .replace(/\s+/g, '')
+}
+
+const RescueVerdictOut = z.object({
+  verdicts: z
+    .array(
+      z.object({
+        qid: z.string(),
+        sameDiscussion: z.boolean(),
+      }),
+    )
+    .max(20),
+})
+
+const RESCUE_SYSTEM = [
+  '你是「两面」系统的题目合并裁决器。输入 JSON：主问题（mainQuestion）与候选题列表（candidates，各含 qid/title）。',
+  '裁决标准：候选题是否与主问题构成「同一场讨论」—— 讨论对象与争议核心基本一致，把候选题下的回答放到主问题里几乎不损失语境。',
+  '规则：',
+  '1. 只有高度确信是同一场讨论（含同一道题的不同版本/重发）才输出 true；仅仅是话题相邻（同题材的不同侧面、衍生问题）一律 false。',
+  '2. 语义近似不算 —— 宁缺毋滥，拿不准就 false。',
+  '输出 JSON：{"verdicts":[{"qid":"候选题qid","sameDiscussion":true或false}]}，每个候选题恰好一条，不要输出任何其他文字。',
+].join('\n')
+
+/**
+ * 薄样本救援：主池 < 5 条时，把外题按两级闸门并入。
+ * 返回合并后的回答（主问题回答永远在前）与来源题清单（如实写入快照，禁止静默）。
+ */
+async function rescueMerge(
+  mainQid: string,
+  mainTitle: string,
+  onTopic: RawAnswer[],
+  foreign: RawAnswer[],
+  ctx: PipelineContext,
+): Promise<{ answers: RawAnswer[]; mergedQuestions: MergedQuestionInfo[] }> {
+  // 外题按 qid 分组（标题取条目 Title，即外题的问题标题）
+  const groups = new Map<string, { title: string; answers: RawAnswer[] }>()
+  for (const a of foreign) {
+    const gqid = questionIdFromUrl(a.url)
+    if (!gqid || !a.questionTitle) continue // 无 qid 或无标题的条目没有并入资格
+    const g = groups.get(gqid)
+    if (g) g.answers.push(a)
+    else groups.set(gqid, { title: a.questionTitle, answers: [a] })
+  }
+
+  const mainNorm = normalizeTitle(mainTitle)
+  const approved: Array<{ qid: string; title: string; reason: 'same_title' | 'related'; answers: RawAnswer[] }> = []
+
+  /* ----- Tier 1：标题归一化后逐字一致（同题重问），无条件并入 ----- */
+  for (const [gqid, g] of groups) {
+    if (approved.length >= MERGE_MAX) break
+    if (normalizeTitle(g.title) === mainNorm) {
+      approved.push({ qid: gqid, title: cleanSourceTitle(g.title), reason: 'same_title', answers: g.answers })
+      ctx.note('merge.decision', { qid: gqid, title: g.title, tier: 1, verdict: 'approved', reason: 'same_title' })
+      log.info('merge.decision', { mainQid, qid: gqid, tier: 1, verdict: 'approved', reason: 'same_title' })
+    }
+  }
+
+  /* ----- Tier 2：其余外题一次批量 LLM 裁决，yes 且有余量才并入 ----- */
+  const tier2Candidates = [...groups.entries()].filter(
+    ([gqid]) => !approved.some((m) => m.qid === gqid),
+  )
+  if (tier2Candidates.length > 0 && approved.length < MERGE_MAX) {
+    try {
+      const payload = {
+        mainQuestion: mainTitle,
+        candidates: tier2Candidates.map(([gqid, g]) => ({ qid: gqid, title: cleanSourceTitle(g.title) })),
+      }
+      const r = await callAgent('rescue', {
+        messages: [
+          { role: 'system', content: RESCUE_SYSTEM },
+          { role: 'user', content: JSON.stringify(payload) },
+        ],
+        jsonMode: true,
+        temperature: 0.1,
+        timeoutMs: 60_000,
+        signal: ctx.signal,
+        validate: (raw) => RescueVerdictOut.parse(parseJsonLoose(raw)),
+      })
+      const yes = new Set(r.content.verdicts.filter((v) => v.sameDiscussion).map((v) => v.qid))
+      for (const [gqid, g] of tier2Candidates) {
+        const verdict = yes.has(gqid)
+        ctx.note('merge.decision', {
+          qid: gqid,
+          title: g.title,
+          tier: 2,
+          verdict: verdict ? 'approved' : 'rejected',
+          reason: 'related',
+        })
+        log.info('merge.decision', { mainQid, qid: gqid, tier: 2, verdict: verdict ? 'approved' : 'rejected', reason: 'related' })
+        if (
+          verdict &&
+          approved.length < MERGE_MAX &&
+          approved.filter((m) => m.reason === 'related').length < RESCUE_TIER2_MAX
+        ) {
+          approved.push({ qid: gqid, title: cleanSourceTitle(g.title), reason: 'related', answers: g.answers })
+        }
+      }
+    } catch (e) {
+      // Tier 2 失败优雅降级：跳过 LLM 裁决，Tier 1 不受影响
+      log.warn('merge.tier2.failed', {
+        mainQid,
+        reason: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
+      })
+      ctx.note('merge.tier2.failed', {})
+    }
+  }
+
+  // 主问题回答永远全保留在前，相关题回答只做补足
+  const answers = [...onTopic, ...approved.flatMap((m) => m.answers)]
+  const mergedQuestions: MergedQuestionInfo[] = approved.map(({ qid, title, reason }) => ({ qid, title, reason }))
+  return { answers, mergedQuestions }
+}
+
+/** 去掉搜索条目标题恒带的「 - 知乎」站点后缀（Tier 2 裁决与快照披露共用） */
+function cleanSourceTitle(raw: string): string {
+  return raw.replace(/\s*[-–—]\s*知乎\s*$/u, '').trim()
+}
+
 function toRawAnswer(it: ZhihuItem): RawAnswer | null {
   const url = (it.Url ?? '').trim()
   // 实测搜索结果自带 ContentID（String），Url 里的 answer id 作为兜底
@@ -175,6 +316,8 @@ function toRawAnswer(it: ZhihuItem): RawAnswer | null {
       ? Math.max(0, Math.trunc(Number(it.VoteUpCount)))
       : 0,
     url,
+    // 搜索条目 Title 即所属问题页标题，救援合并据此识别「同标题新题」
+    questionTitle: (it.Title ?? '').trim() || undefined,
     // 实测搜索结果只有 CommentCount（评论总数），没有评论内容，
     // 无法按口径统计「提出不同看法的精选评论条数」—— 该字段暂不产出（待产品确认口径）
     commentChallengeCount: undefined,
@@ -253,7 +396,9 @@ const MergeOut = z.object({
       z.object({
         /** 去重后的代表表述 */
         text: z.string().min(4).max(160),
-        sourceQuotes: z.array(z.string().min(2).max(300)).max(4).default([]),
+        // 上限放宽到 12（救援合并放大内容池后，实测模型单判断会给出 >4 条原话）；
+        // 服务端截回 4 —— 该字段只进 orient 内部上下文，不出契约
+        sourceQuotes: z.array(z.string().min(2).max(300)).max(12).default([]),
         /** 参与该议题的原回答 id */
         answerIds: z.array(z.string().min(1)).max(20).default([]),
       }),
@@ -395,31 +540,61 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
         .map(toRawAnswer)
         .filter((a): a is RawAnswer => a !== null)
 
-      // ③ 回答 URL 强校验（契约 ENDPOINTS.analysis 注释，防「答非所问快照」的最后闸门）。
-      //    2026-09-12 team-lead 二次拍板：保持最严、一个字节都不松，「混入题保留」
-      //    的松化方案已否决 —— 混入的相关题回答正是「答非所问快照」的原材料：
-      //    D1 实测截断 qid 搜出别的题、照样产出结构合法的快照（按日缓存活一整天），
-      //    这道闸门就是那次事故的墓碑。sampleCount 因此变小是诚实的代价。
-      //    只保留属于目标问题（Url 含 /question/<qid>/）的回答；一条都没有 → failed。
-      const answers = candidates.filter((a) => questionIdFromUrl(a.url) === qid)
-      const foreign = candidates.length - answers.length
-      if (foreign > 0) {
-        ctx.note('fetchAnswers.foreignDropped', { foreign, kept: answers.length })
-        log.warn('llm.fetchAnswers.foreignDropped', { qid, foreign, kept: answers.length })
+      // ③ 回答 URL 强校验（防「答非所问快照」的最后闸门）。
+      //    2026-09-12 team-lead 二次拍板：保持最严 —— 混入的相关题回答正是「答非所问
+      //    快照」的原材料：D1 实测截断 qid 搜出别的题、照样产出结构合法的快照
+      //   （按日缓存活一整天），这道闸门就是那次事故的墓碑。
+      //    同日「薄样本救援合并」（第六次契约演进）：判定权收归两级显式闸门 ——
+      //    Tier1 标题归一化逐字一致 / Tier2 批量 LLM 裁决（见 rescueMerge），
+      //    URL 校验随之集合化（主 qid 或任一已批准合并 qid）；语义近似的 URL
+      //    模糊匹配仍然禁止，判定权不在 URL 上。
+      const onTopic = candidates.filter((a) => questionIdFromUrl(a.url) === qid)
+      const foreign = candidates.filter((a) => {
+        const uqid = questionIdFromUrl(a.url)
+        return uqid !== null && uqid !== qid
+      })
+
+      // ④ 薄样本救援合并：仅当主池 < 5 条时触发；富题永远走纯净单题路径。
+      //    主池为 0 的特殊锚点规则：老题在搜索上的可见性在 0–1 条之间波动
+      //   （实测 330106513），若 0 即 failed，救援在最需要的场景永不触发。
+      //   故允许 0 锚点救援，但**必须至少并入一个 Tier 1（标题逐字一致）题**
+      //    才放行 —— 零锚点快照只存在于标题被逐字验证的场合；只有 Tier 2
+      //    （LLM 裁决）可依赖时仍然 failed（爆炸半径控制）。
+      let answers = onTopic
+      let mergedQuestions: MergedQuestionInfo[] | undefined
+      if (onTopic.length < RESCUE_THRESHOLD) {
+        const rescued = await rescueMerge(qid, question, onTopic, foreign, ctx)
+        if (onTopic.length === 0 && !rescued.mergedQuestions.some((m) => m.reason === 'same_title')) {
+          log.warn('llm.fetchAnswers.foreignDropped', { qid, foreign: foreign.length, kept: 0, rescue: 'no_same_title_anchor' })
+          throw new PipelineError(
+            '回答均不属于目标问题（URL 强校验不通过，且无可靠的同标题救援锚点）',
+            'zhihu_error',
+            'extract',
+            true,
+          )
+        }
+        answers = rescued.answers
+        mergedQuestions = rescued.mergedQuestions.length > 0 ? rescued.mergedQuestions : undefined
+        log.info('llm.rescue', {
+          qid,
+          before: onTopic.length,
+          after: answers.length,
+          merged: mergedQuestions?.length ?? 0,
+        })
+      } else if (foreign.length > 0) {
+        ctx.note('fetchAnswers.foreignDropped', { foreign: foreign.length, kept: onTopic.length })
+        log.info('llm.fetchAnswers.foreignDropped', { qid, foreign: foreign.length, kept: onTopic.length, rescue: false })
       }
 
       ctx.report({ stage: 'extract', stageRatio: 0, sampleCount: answers.length })
-      log.info('llm.fetchAnswers', { qid, title: 'found', answers: answers.length, foreignDropped: foreign })
-
-      if (answers.length === 0) {
-        throw new PipelineError(
-          '回答均不属于目标问题（URL 强校验不通过）',
-          'zhihu_error',
-          'extract',
-          true,
-        )
-      }
-      return { question, answers }
+      log.info('llm.fetchAnswers', {
+        qid,
+        title: 'found',
+        answers: answers.length,
+        onTopic: onTopic.length,
+        merged: mergedQuestions?.length ?? 0,
+      })
+      return { question, answers, mergedQuestions }
     },
 
     /* ---------------- 01 提取：一批 3–5 条回答 ---------------- */
@@ -466,7 +641,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
           return {
             id: `j${i + 1}`,
             text: j.text,
-            sourceQuotes: j.sourceQuotes ?? [],
+            sourceQuotes: (j.sourceQuotes ?? []).slice(0, 4),
             answerIds: ids,
           }
         })

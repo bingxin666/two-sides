@@ -31,6 +31,8 @@ export interface RawAnswer {
   url: string
   /** 该回答下「提出不同看法」的精选评论条数（评论无作者字段，按条计） */
   commentChallengeCount?: number
+  /** 该回答所属问题页的标题（搜索条目 Title，剥后缀前原样）；薄样本救援合并据此识别同标题新题 */
+  questionTitle?: string
 }
 
 /** 01 提取的产物：一条可争议判断 + 可定位的原话 */
@@ -88,9 +90,27 @@ export interface PipelineContext {
   note(event: string, fields?: Record<string, unknown>): void
 }
 
+/** 薄样本救援合并的来源题（契约 Analysis.mergedQuestions 元素，2026-09-12 第六次契约演进） */
+export interface MergedQuestionInfo {
+  qid: string
+  title: string
+  reason: 'same_title' | 'related'
+}
+
 export interface PipelineAgents {
-  /** 内容获取：题目标题 + 内容池 */
-  fetchAnswers(qid: string, ctx: PipelineContext): Promise<{ question: string; answers: RawAnswer[] }>
+  /**
+   * 内容获取：题目标题 + 内容池 + 薄样本救援合并的来源题清单。
+   * mergedQuestions 仅在触发救援合并（主池 < 5）且实际并入 ≥1 题时非空，
+   * 由 pipeline 原样写入 Analysis.mergedQuestions（契约：禁止静默合并）。
+   */
+  fetchAnswers(
+    qid: string,
+    ctx: PipelineContext,
+  ): Promise<{
+    question: string
+    answers: RawAnswer[]
+    mergedQuestions?: MergedQuestionInfo[]
+  }>
 
   /** 01 提取：入参是「一批」回答（3–5 条），出参是这批里的判断句 */
   extract(batch: RawAnswer[], ctx: PipelineContext): Promise<ExtractedJudgment[]>

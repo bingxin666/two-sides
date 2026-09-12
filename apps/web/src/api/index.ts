@@ -19,11 +19,11 @@ import { passThrough, request, type RequestOptions } from './http'
  * API 层（增强层 getOpposite 今天不做）。
  * 所有 URL 一律由 contract 的 ENDPOINTS 构造，不手写字符串。
  *
- * mock 模式（VITE_API_MODE=mock，缺省也是 mock）直接返回 fixture，
- * 不经过 fetch；切到 live 只需换环境变量，调用方零改动。
+ * live 模式为产品缺省（真实后端）；mock（VITE_API_MODE=mock，需手动开）
+ * 保留作离线应急 —— fixtures 与适配器留在仓库，调用方零改动。
  */
 
-export const IS_MOCK = (import.meta.env.VITE_API_MODE ?? 'mock') === 'mock'
+export const IS_MOCK = (import.meta.env.VITE_API_MODE ?? 'live') === 'mock'
 
 /** 当日热榜（只含已 ready 的预置题） */
 export async function getHot(): Promise<HotRespT> {
