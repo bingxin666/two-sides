@@ -64,6 +64,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
   let controller: AbortController | null = null
   let timer: ReturnType<typeof setTimeout> | null = null
   let currentQid: string | null = null
+  let currentTitle: string | null = null
   let pollStartAt = 0
   let rounds = 0
   let netErrors = 0
@@ -105,7 +106,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
     return makeError('zhihu_error')
   }
 
-  function scheduleNext(qid: string, my: number): void {
+  function scheduleNext(qid: string, my: number, title: string | undefined): void {
     if (my !== generation) return
     rounds += 1
     // 总时限封顶：超过 5 分钟置 failed（timeout，可重试），不再让用户无限转
@@ -117,17 +118,17 @@ export const useAnalysisStore = defineStore('analysis', () => {
     const wait = Math.min(POLL_MAX_MS, Math.round(POLL_BASE_MS * factor))
     timer = setTimeout(() => {
       timer = null
-      void runRound(qid, my)
+      void runRound(qid, my, title)
     }, wait)
   }
 
-  async function runRound(qid: string, my: number): Promise<void> {
+  async function runRound(qid: string, my: number, title: string | undefined): Promise<void> {
     if (my !== generation) return
 
     const ctrl = new AbortController()
     controller = ctrl
     try {
-      const res = await getAnalysis(qid, { signal: ctrl.signal })
+      const res = await getAnalysis(qid, { signal: ctrl.signal, title })
       if (my !== generation) return
 
       if (isSnapshot(res)) {
@@ -148,7 +149,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
 
       netErrors = 0
       phase.value = 'generating'
-      scheduleNext(qid, my)
+      scheduleNext(qid, my, title)
     } catch (e) {
       if (my !== generation || isAbort(e)) return
       // 契约违规（响应形状/字段值不对）：确定性错误，直接终态不重试
@@ -162,20 +163,26 @@ export const useAnalysisStore = defineStore('analysis', () => {
         return
       }
       // 网络抖动不打断轮询，按退避继续
-      scheduleNext(qid, my)
+      scheduleNext(qid, my, title)
     } finally {
       if (controller === ctrl) controller = null
     }
   }
 
-  /** GET 主端点；200 → ready，202 → 自动轮询至 ready / failed。幂等可重入。 */
-  async function load(qid: string): Promise<void> {
-    // 同一 qid：已就绪或仍在轮询中 → 直接返回，不重复触发
-    if (currentQid === qid && (phase.value === 'ready' || polling)) return
+  /**
+   * GET 主端点；200 → ready，202 → 自动轮询至 ready / failed。幂等可重入。
+   * title：冷题标题提示（/search 候选），参与幂等判断 —— 同 qid 不同 title
+   * 走的是服务端不同路径（question_titles 缓存语义），不允许短路返回。
+   */
+  async function load(qid: string, opts?: { title?: string }): Promise<void> {
+    const title = opts?.title
+    // 同 qid 且同 title：已就绪或仍在轮询中 → 直接返回，不重复触发
+    if (currentQid === qid && currentTitle === (title ?? null) && (phase.value === 'ready' || polling)) return
 
     cancelPolling()
     const my = generation
     currentQid = qid
+    currentTitle = title ?? null
     pollStartAt = Date.now()
     rounds = 0
     netErrors = 0
@@ -186,14 +193,16 @@ export const useAnalysisStore = defineStore('analysis', () => {
     phase.value = 'loading'
     polling = true
 
-    await runRound(qid, my)
+    await runRound(qid, my, title)
   }
 
-  /** POST 重试；成功后恢复轮询 */
-  async function retry(qid: string): Promise<void> {
+  /** POST 重试；成功后恢复轮询。title 语义同 load。 */
+  async function retry(qid: string, opts?: { title?: string }): Promise<void> {
+    const title = opts?.title
     cancelPolling()
     const my = generation
     currentQid = qid
+    currentTitle = title ?? null
     pollStartAt = Date.now()
     rounds = 0
     netErrors = 0
@@ -202,7 +211,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
     polling = true
 
     try {
-      const res = await retryAnalysis(qid)
+      const res = await retryAnalysis(qid, false, title)
       if (my !== generation) return
       progress.value = res
       if (res.status === 'failed') {
@@ -210,7 +219,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
         return
       }
       phase.value = 'generating'
-      scheduleNext(qid, my)
+      scheduleNext(qid, my, title)
     } catch (e) {
       if (my !== generation || isAbort(e)) return
       toFailed(errorFrom(e))
@@ -224,6 +233,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
   function reset(): void {
     cancelPolling()
     currentQid = null
+    currentTitle = null
     pollStartAt = 0
     rounds = 0
     netErrors = 0

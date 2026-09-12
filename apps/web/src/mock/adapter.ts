@@ -4,15 +4,18 @@ import {
   HealthResp,
   HotResp,
   ProgressResp,
+  SearchResp,
   type Analysis as AnalysisT,
   type ErrorCode,
   type HealthResp as HealthRespT,
   type HotResp as HotRespT,
   type ProgressResp as ProgressRespT,
+  type SearchResp as SearchRespT,
   type Stage,
 } from '@two-sides/contract'
 
 import hotFixture from './fixtures/hot.json'
+import searchFixture from './fixtures/search.json'
 import kaoyanFixture from './fixtures/analysis-kaoyan.json'
 import houseFixture from './fixtures/analysis-house.json'
 import timelineFixture from './fixtures/progress-timeline.json'
@@ -32,6 +35,7 @@ import timelineFixture from './fixtures/progress-timeline.json'
  */
 
 const HOT: HotRespT = HotResp.parse(hotFixture)
+const SEARCH: SearchRespT = SearchResp.parse(searchFixture)
 const ANALYSES: AnalysisT[] = [Analysis.parse(kaoyanFixture), Analysis.parse(houseFixture)]
 const READY = new Map(ANALYSES.map((a) => [a.qid, a]))
 const TIMELINE: ProgressRespT[] = ProgressResp.array().parse(timelineFixture)
@@ -129,14 +133,27 @@ function activeFailCode(): ErrorCode | null {
   return failCleared ? null : fail
 }
 
-/* ---------------- 四个方法 ---------------- */
+/* ---------------- 方法 ---------------- */
 
 async function getHot(): Promise<HotRespT> {
   await delay(LATENCY_MS)
   return HOT
 }
 
-async function getAnalysis(qid: string): Promise<AnalysisT | ProgressRespT> {
+/**
+ * 文字搜题（唯一冷题入口）。按空白分词做标题包含匹配，无命中返回空数组
+ * —— 离线也能验证搜索下拉的空态。
+ */
+async function getSearch(q: string): Promise<SearchRespT> {
+  await delay(LATENCY_MS)
+  const query = q.trim()
+  if (!query) return SearchResp.parse({ items: [] })
+  const terms = query.split(/\s+/).filter((t) => t.length > 0)
+  const items = SEARCH.items.filter((c) => terms.some((t) => c.title.includes(t)))
+  return SearchResp.parse({ items })
+}
+
+async function getAnalysis(qid: string, title?: string): Promise<AnalysisT | ProgressRespT> {
   await delay(LATENCY_MS)
 
   const failCode = activeFailCode()
@@ -150,14 +167,15 @@ async function getAnalysis(qid: string): Promise<AnalysisT | ProgressRespT> {
 
   if (ready) return ready
 
-  // 未预置的题：时间线走完后落一份快照（mock 场景下复用模板，qid 换成真实请求的）
+  // 未预置的题：时间线走完后落一份快照（mock 场景下复用模板，qid 换成真实请求的；
+  // 带 title 时用它做题面，模拟 titleHint 生成的效果）
   const template = ANALYSES[hashCode(qid) % ANALYSES.length]
-  const snapshot = Analysis.parse({ ...template, qid })
+  const snapshot = Analysis.parse({ ...template, qid, question: title ?? template.question })
   READY.set(qid, snapshot)
   return snapshot
 }
 
-async function retryAnalysis(qid: string, force = false): Promise<ProgressRespT> {
+async function retryAnalysis(qid: string, force = false, _title?: string): Promise<ProgressRespT> {
   await delay(LATENCY_MS)
 
   // 一次性失败标记在重试后清除：模拟冷却结束、重新排队
@@ -187,6 +205,7 @@ async function getHealth(): Promise<HealthRespT> {
 
 export const mockApi = {
   getHot,
+  getSearch,
   getAnalysis,
   retryAnalysis,
   getHealth,

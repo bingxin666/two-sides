@@ -30,12 +30,17 @@
   --spectrum-4: #D6A475;
   --spectrum-5: #BA8A42;
 
-  /* ---- 字体族 ---- */
-  --font-serif: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', 'STSong', 'SimSun', serif;
-  --font-sans: 'Inter', 'Sarasa Gothic SC', 'PingFang SC', 'Hiragino Sans GB',
+  /* ---- 字体族 ----
+     Serif / Inter / Noto Sans SC 为自托管 @fontsource-variable（可变字重，见 global.css 顶部），
+     'X Variable' 是 fontsource-variable 的家族名；栈里保留静态家族名兜底。
+     Sarasa Gothic SC 无自托管源：本地安装者优先，缺失时回退自托管 Noto Sans SC，
+     再兜底系统黑体（docs/02 §3.2 的字重规格不变，可变字体按 font-weight 实时匹配）。 */
+  --font-serif: 'Noto Serif SC Variable', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC',
+    'STSong', 'SimSun', serif;
+  --font-sans: 'Inter Variable', 'Inter', 'Sarasa Gothic SC', 'PingFang SC', 'Hiragino Sans GB',
     'Microsoft YaHei', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
-  --font-body: 'Sarasa Gothic SC', '更纱黑体 SC', 'Inter', 'PingFang SC',
-    'Microsoft YaHei', system-ui, sans-serif;
+  --font-body: 'Sarasa Gothic SC', '更纱黑体 SC', 'Noto Sans SC Variable', 'Noto Sans SC',
+    'Inter Variable', 'Inter', 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
 
   /* ---- 布局几何（1440×900 基准） ---- */
   --page-pad: 48px;

@@ -3,6 +3,16 @@
  * 产品调性：白底 + 玻璃光幕。这里只做 reset / 基线 / 滚动条收敛，不写任何业务样式。
  */
 
+/* 字体自托管（docs/02 §1：不依赖外链，评委网络不可控）。
+   用 @fontsource-variable（可变字重）而非静态包：每个 unicode-range 分片只需一条
+   @font-face 覆盖 200–900 全字重，主 CSS 从静态版的 ~611KB（gzip 259KB）降到 ~1/3；
+   woff2 分片依旧按需下载（浏览器命中 unicode-range 才拉对应分片，用户字体流量可控）。
+   Vite 本地打包，运行时零 CDN 请求。依赖未安装前本文件会导致 dev/build 失败。 */
+@import '@fontsource-variable/inter/index.css';
+@import '@fontsource-variable/noto-serif-sc/index.css';
+/* Noto Sans SC 仅作「看山解读」正文的 Sarasa 回退（fontsource 无 Sarasa Gothic SC） */
+@import '@fontsource-variable/noto-sans-sc/index.css';
+
 *,
 *::before,
 *::after {

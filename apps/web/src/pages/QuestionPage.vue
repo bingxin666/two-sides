@@ -21,11 +21,18 @@ const { phase, analysis, progress, error, selectedJudgmentId } = storeToRefs(sto
 
 const qid = computed(() => String(route.params.qid ?? ''))
 const jFromQuery = computed(() => (typeof route.query.j === 'string' ? route.query.j : null))
+/** 搜索候选带来的标题提示：冷题懒生成时给服务端当 title 提示（契约 ENDPOINTS.analysis） */
+const titleFromQuery = computed(() => {
+  const t = route.query.title
+  return typeof t === 'string' && t.trim() ? t : undefined
+})
 
 const isGenerating = computed(() => phase.value === 'loading' || phase.value === 'generating')
 
 const title = computed(() => {
   if (analysis.value?.question) return analysis.value.question
+  // 生成期间搜索候选已带来标题：如实用它，不让用户看占位文案
+  if (isGenerating.value && titleFromQuery.value) return titleFromQuery.value
   if (phase.value === 'failed') return '这个问题今天没能生成'
   return '正在获取问题…'
 })
@@ -65,12 +72,14 @@ function onCancel() {
 }
 
 function onRetry() {
-  if (qid.value) void store.retry(qid.value)
+  if (!qid.value) return
+  // 懒生成失败后的重试同样带上 title 提示，避免二次生成降级到无提示路径
+  void store.retry(qid.value, titleFromQuery.value ? { title: titleFromQuery.value } : undefined)
 }
 
-// 首屏加载；换题时重置再拉
+// 首屏加载；换题时重置再拉。title 提示随 query 透传给懒生成
 onMounted(() => {
-  if (qid.value) void store.load(qid.value)
+  if (qid.value) void store.load(qid.value, titleFromQuery.value ? { title: titleFromQuery.value } : undefined)
 })
 
 // 离开页面即停本轮轮询（后端任务不中断，§6.3）
@@ -81,7 +90,7 @@ onUnmounted(() => {
 watch(qid, (id, prev) => {
   if (!id || id === prev) return
   store.reset()
-  void store.load(id)
+  void store.load(id, titleFromQuery.value ? { title: titleFromQuery.value } : undefined)
 })
 
 // ?j= 恢复展开态

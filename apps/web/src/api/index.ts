@@ -4,17 +4,19 @@ import {
   HealthResp,
   HotResp,
   ProgressResp,
+  SearchResp,
   type AnalysisResp,
   type HealthResp as HealthRespT,
   type HotResp as HotRespT,
   type ProgressResp as ProgressRespT,
+  type SearchResp as SearchRespT,
 } from '@two-sides/contract'
 
 import { mockApi } from '@/mock/adapter'
 import { passThrough, request, type RequestOptions } from './http'
 
 /**
- * API 层 —— 四个方法（增强层 getOpposite 今天不做）。
+ * API 层（增强层 getOpposite 今天不做）。
  * 所有 URL 一律由 contract 的 ENDPOINTS 构造，不手写字符串。
  *
  * mock 模式（VITE_API_MODE=mock，缺省也是 mock）直接返回 fixture，
@@ -30,21 +32,30 @@ export async function getHot(): Promise<HotRespT> {
   return data
 }
 
+/** 文字搜题：冷题入口（知乎对纯 qid 搜索不出结果），服务端去重后 ≤8 条 */
+export async function getSearch(q: string): Promise<SearchRespT> {
+  if (IS_MOCK) return mockApi.getSearch(q)
+  const { data } = await request(ENDPOINTS.search(q), SearchResp)
+  return data
+}
+
 /**
  * 唯一主端点。
  * 200 → 完整快照（AnalysisResp）；202 → 进度或失败（ProgressResp）。
  * 用响应形态而非状态码兜底，避免反向代理改写状态码时判错。
+ * title：冷题懒生成的标题提示（来自 /search 候选或上游跳转），只进 query。
  */
 export async function getAnalysis(
   qid: string,
-  options?: RequestOptions,
+  options?: RequestOptions & { title?: string },
 ): Promise<AnalysisResp | ProgressRespT> {
-  if (IS_MOCK) return mockApi.getAnalysis(qid)
+  if (IS_MOCK) return mockApi.getAnalysis(qid, options?.title)
 
   // 懒生成首响应可能要 12s+（后端 PIPELINE_FAKE_DURATION_MS），单次超时放宽到 30s；
-  // hot/health 没有生成交互，维持 http.ts 的默认 12s
-  const { status, data } = await request(ENDPOINTS.analysis(qid), passThrough, {
-    ...options,
+  // hot/search/health 没有生成交互，维持 http.ts 的默认 12s
+  const { title, ...rest } = options ?? {}
+  const { status, data } = await request(ENDPOINTS.analysis(qid, title), passThrough, {
+    ...rest,
     timeoutMs: options?.timeoutMs ?? 30_000,
   })
   const isSnapshot =
@@ -57,9 +68,13 @@ export async function getAnalysis(
 }
 
 /** 失败重试 / ?force=1 强制重跑；返回当前进度体 */
-export async function retryAnalysis(qid: string, force = false): Promise<ProgressRespT> {
-  if (IS_MOCK) return mockApi.retryAnalysis(qid, force)
-  const { data } = await request(ENDPOINTS.retry(qid, force), ProgressResp, { method: 'POST' })
+export async function retryAnalysis(
+  qid: string,
+  force = false,
+  title?: string,
+): Promise<ProgressRespT> {
+  if (IS_MOCK) return mockApi.retryAnalysis(qid, force, title)
+  const { data } = await request(ENDPOINTS.retry(qid, force, title), ProgressResp, { method: 'POST' })
   return data
 }
 
@@ -75,6 +90,7 @@ export async function getHealth(): Promise<HealthRespT> {
 
 export const api = {
   getHot,
+  getSearch,
   getAnalysis,
   retryAnalysis,
   getHealth,

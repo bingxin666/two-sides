@@ -4,15 +4,12 @@
  * 热榜数据来自 GET /hot（只含已 ready），空态/缺数据如实提示，不白屏
  */
 import { onMounted, ref } from 'vue'
-import { useRouter } from 'vue-router'
 import type { HotItem } from '@two-sides/contract'
 import { getHot } from '@/api'
 import VeilGlass from '@/components/veil/VeilGlass.vue'
 import HotGrid from '@/components/home/HotGrid.vue'
 import SearchBar from '@/components/home/SearchBar.vue'
 import HonestFooter from '@/components/home/HonestFooter.vue'
-
-const router = useRouter()
 
 const items = ref<HotItem[]>([])
 const hotFailed = ref(false)
@@ -26,10 +23,6 @@ onMounted(async () => {
     hotFailed.value = true
   }
 })
-
-function onSubmit(qid: string) {
-  router.push({ name: 'question', params: { qid } })
-}
 </script>
 
 <template>
@@ -47,7 +40,7 @@ function onSubmit(qid: string) {
     </div>
 
     <div class="home__search">
-      <SearchBar @submit="onSubmit" />
+      <SearchBar />
     </div>
 
     <div class="home__foot">

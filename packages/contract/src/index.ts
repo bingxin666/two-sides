@@ -174,6 +174,28 @@ export const ErrEnvelope = z.object({
   message: z.string(),
 })
 
+/* ============================================================
+ * 4.5 搜索候选（D1 增补 · 冷题入口）
+ * ============================================================ */
+
+/**
+ * GET /search?q=<问题文本> 的候选题。
+ * 产品决策（2026-09-12 用户拍板）：**产品输入只有「问题文字」，不做任何 qid 反查**。
+ * 依据（全部实测）：知乎搜索对纯 qid 搜不出结果；og:title 被 zse-ck 风控挑战拦截
+ * （无浏览器执行环境拿不到）；global_search 不索引 qid。
+ * 服务端从 zhihu_search 结果的 Url 中提取 /question/<qid>/，按问题维度去重，
+ * 返回 ≤8 条；命中结果顺带写入 question_titles 永久缓存（缓存预热）。
+ * qid 仅作内部资源键（缓存键/路由参数），不对用户暴露，也**永不作为标题解析的输入**。
+ */
+export const SearchCandidate = z.object({
+  qid: z.string(),
+  title: z.string(),
+})
+export const SearchResp = z.object({
+  items: z.array(SearchCandidate).max(8),
+})
+export const SearchEnvelope = okEnvelope(SearchResp)
+
 export const HotEnvelope = okEnvelope(HotResp)
 export const AnalysisEnvelope = okEnvelope(AnalysisResp)
 export const ProgressEnvelope = okEnvelope(ProgressResp)
@@ -211,9 +233,26 @@ export const ERROR_COPY: Record<
 export const API_V1 = '/api/v1'
 
 export const ENDPOINTS = {
-  analysis: (qid: string) => `${API_V1}/questions/${qid}/analysis`,
-  retry: (qid: string, force = false) =>
-    `${API_V1}/questions/${qid}/analysis${force ? '?force=1' : ''}`,
+  /**
+   * title 可选：冷题懒生成的标题提示（来自 /search 候选或上游跳转）。
+   * 服务端不完全信任它——抓到的回答 URL 必须含 /question/<qid>/，
+   * 一条都没有就 failed，绝不产出答非所问的快照。
+   * 无 title 且 question_titles 缓存未命中 → 直接 failed（产品决策：不做任何 qid 反查）。
+   */
+  analysis: (qid: string, title?: string) => {
+    const params = new URLSearchParams()
+    if (title) params.set('title', title)
+    const qs = params.toString()
+    return `${API_V1}/questions/${qid}/analysis${qs ? `?${qs}` : ''}`
+  },
+  retry: (qid: string, force = false, title?: string) => {
+    const params = new URLSearchParams()
+    if (force) params.set('force', '1')
+    if (title) params.set('title', title)
+    const qs = params.toString()
+    return `${API_V1}/questions/${qid}/analysis${qs ? `?${qs}` : ''}`
+  },
+  search: (q: string) => `${API_V1}/search?q=${encodeURIComponent(q)}`,
   hot: `${API_V1}/hot`,
   health: `${API_V1}/health`,
   zhihuAuthorize: `${API_V1}/auth/zhihu/authorize`,
@@ -289,3 +328,5 @@ export type AnalysisResp = z.infer<typeof AnalysisResp>
 export type HealthResp = z.infer<typeof HealthResp>
 export type OppositeResp = z.infer<typeof OppositeResp>
 export type QuotaResp = z.infer<typeof QuotaResp>
+export type SearchCandidate = z.infer<typeof SearchCandidate>
+export type SearchResp = z.infer<typeof SearchResp>

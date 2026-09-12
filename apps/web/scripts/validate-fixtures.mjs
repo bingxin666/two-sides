@@ -23,6 +23,7 @@ import {
   Analysis,
   HotResp,
   ProgressResp,
+  SearchResp,
   ErrorCode,
   checkCountingRules,
 } from '../../../packages/contract/src/index.ts'
@@ -32,6 +33,7 @@ const FIX_DIR = path.join(HERE, '..', 'src', 'mock', 'fixtures')
 
 const ANALYSIS_FILES = ['analysis-kaoyan.json', 'analysis-house.json']
 const HOT_FILE = 'hot.json'
+const SEARCH_FILE = 'search.json'
 const TIMELINE_FILE = 'progress-timeline.json'
 
 const FIX = process.argv.includes('--fix')
@@ -189,7 +191,29 @@ for (const name of ANALYSIS_FILES) {
   )
 }
 
-// 3) progress timeline
+// 3) search 候选（唯一冷题入口）
+{
+  const { json } = readJson(SEARCH_FILE)
+  const parsed = SearchResp.safeParse(json)
+  if (!parsed.success) {
+    violations.push(
+      `${SEARCH_FILE} 未通过 SearchResp: ${parsed.error.issues.map((i) => `${i.path.join('.')}:${i.message}`).join('; ')}`,
+    )
+  } else {
+    const items = parsed.data.items
+    if (items.length < 3 || items.length > 5) {
+      violations.push(`${SEARCH_FILE} ${items.length} 条，mock 要求 3–5 条`)
+    }
+    const qids = items.map((i) => i.qid)
+    if (new Set(qids).size !== qids.length) violations.push(`${SEARCH_FILE} 存在重复 qid`)
+    if (!items.some((i) => i.qid === '478475397')) {
+      violations.push(`${SEARCH_FILE} 缺少点名的候选题 478475397「结婚应不应该买房？」`)
+    }
+    notes.push(`${SEARCH_FILE}: ${items.length} 条候选`)
+  }
+}
+
+// 4) progress timeline
 {
   const { json } = readJson(TIMELINE_FILE)
   const parsed = ProgressResp.array().safeParse(json)
@@ -207,7 +231,7 @@ for (const name of ANALYSIS_FILES) {
   }
 }
 
-// 4) 强制失败分支用到的 ErrorCode 必须合法
+// 5) 强制失败分支用到的 ErrorCode 必须合法
 for (const code of ['quota_exhausted', 'zhihu_error', 'llm_error', 'timeout', 'parse_error']) {
   if (!ErrorCode.safeParse(code).success) violations.push(`mock 失败分支用到非法 ErrorCode: ${code}`)
 }
