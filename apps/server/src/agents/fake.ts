@@ -317,9 +317,9 @@ export function createFakeAgents(opts: FakeAgentsOptions = {}): PipelineAgents {
       const w = buildWorld(qid, ctx.date)
       if (!timed) {
         timed = true
-        // 按「并发轮数」而不是调用次数估算总时长：提取信号量 4、取向 6（pipeline.ts）
-        const extractRounds = Math.ceil(Math.ceil(w.answers.length / 4) / 4)
-        const orientRounds = Math.ceil(w.judgments.length / 6)
+        // 按「并发轮数」而不是调用次数估算总时长：默认提取 30、取向 100
+        const extractRounds = Math.ceil(Math.ceil(w.answers.length / 4) / 30)
+        const orientRounds = Math.ceil(w.judgments.length / 100)
         const steps = 1 + extractRounds + 1 + orientRounds + 1
         stepMs = Math.max(0, Math.round(env.PIPELINE_FAKE_DURATION_MS / steps))
       }

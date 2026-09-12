@@ -329,6 +329,10 @@ const ExtractOut = z.object({
         /** 必须能在原文中定位的原话 */
         quote: z.string().min(2).max(300),
         answerId: z.string().min(1),
+        /** 同一议题的简短标签，帮助归并时区分派系 */
+        topic: z.string().min(2).max(80).optional(),
+        /** 这条原话所属的立场家族；不是简单的正/反标签 */
+        faction: z.string().min(2).max(60).optional(),
       }),
     )
     // 上限故意放宽（实测模型会超出），服务端不截断 —— 交给 merge 去重
@@ -342,11 +346,12 @@ const EXTRACT_SYSTEM = [
   '1. 只抽取「可争议的判断句」—— 表达立场/评价/预测的句子；事实陈述、纯叙事、纯数据一律不抽。',
   '2. 一条回答可以、也应该拆成多个彼此独立的判断：分别捕捉它对不同对象、条件、时间范围、因果关系或价值取舍的立场。不要把整段回答压成一个笼统观点。',
   '3. 每条回答尽可能提取 2–6 条高信号判断；只有确实只有一条时才输出一条。不要为了凑数拆分同义改写。',
-  '4. 每条判断必须绑定至少一条回答原文里的原话引用（quote），原文里抽不出就丢弃该判断。',
-  '5. quote 必须是 quote 所绑定那条回答正文的连续子串，禁止改写、缩写、翻译。',
-  '6. 只使用输入里给出的 answerId，禁止编造。',
-  '7. 优先保留少数派、带限定条件的反例和互相冲突的判断；不要因为同一回答里出现主次立场就只留主立场。',
-  '输出 JSON：{"judgments":[{"text":"判断句","quote":"原话","answerId":"回答id"}]}，不要输出任何其他文字。',
+  '4. 对每条判断同时给出 topic（它在讨论什么）和 faction（它属于哪一类真实立场）。faction 要能区分「无条件支持」「有条件支持」「认为前提不成立」「强调代价/风险」「主张换一套衡量标准」等不同派系，不要只写“支持/反对”。',
+  '5. 同一个 topic 下如果存在多个派系，必须分别输出，不能把它们揉成一句折中结论；少数派、让步、反例和互相冲突的判断都要保留。',
+  '6. 每条判断必须绑定至少一条回答原文里的原话引用（quote），原文里抽不出就丢弃该判断。',
+  '7. quote 必须是 quote 所绑定那条回答正文的连续子串，禁止改写、缩写、翻译。',
+  '8. 只使用输入里给出的 answerId，禁止编造。',
+  '输出 JSON：{"judgments":[{"text":"判断句","topic":"讨论对象或核心问题","faction":"立场家族","quote":"原话","answerId":"回答id"}]}，不要输出任何其他文字。',
 ].join('\n')
 
 function quoteLocatable(quote: string, content: string): boolean {
@@ -383,6 +388,7 @@ export interface MergeCandidate {
   text: string
   sourceQuotes?: string[]
   answerIds?: string[]
+  factionHints?: string[]
 }
 
 export function normalizeMergedJudgments(
@@ -410,6 +416,7 @@ export function normalizeMergedJudgments(
         text: j.text,
         sourceQuotes,
         answerIds: [...new Set([...explicitIds, ...inferredIds])],
+        factionHints: (j.factionHints ?? []).map((x) => x.trim()).filter(Boolean).slice(0, 6),
       }
     })
     .filter((j) => j.answerIds.length > 0 || j.sourceQuotes.some((quote) =>
@@ -470,6 +477,8 @@ const MergeOut = z.object({
         sourceQuotes: z.array(z.string().min(2).max(300)).max(12).default([]),
         /** 参与该议题的原回答 id */
         answerIds: z.array(z.string().min(1)).max(20).default([]),
+        /** 同一议题下真实存在的 2–4 个立场家族，供取向阶段保留多峰 */
+        factionHints: z.array(z.string().min(2).max(60)).max(6).default([]),
       }),
     )
     // 上限放宽到 60（实测模型合并后仍可能超过 16）；服务端按契约裁到 15
@@ -479,13 +488,13 @@ const MergeOut = z.object({
 const MERGE_SYSTEM = [
   '你是「两面」系统的 02 归并 Agent。输入是一批已抽取的判断句（JSON，含来源回答 id）。',
   '硬约束：',
-  '1. 语义聚类去重：只有在核心主张、对象、条件和价值取舍都相同，且只是措辞不同或同义重复时才合并。',
-  '2. 以下情况必须保留为不同判断：结论方向不同；适用对象/人群不同；前提条件或时间范围不同；因果解释不同；同一回答中的主张与让步/反例不同。',
-  '3. 代表表述要具体、可单独被支持或反驳，禁止用过于宽泛的上位句吞掉细分分歧。',
-  '4. 合并时保留全部来源：answerIds 必须是被合并判断的原 answerId，禁止编造；sourceQuotes 从被合并判断的 quote 里取。',
-  '5. 不做立场判断、不改写含义、不丢弃少数派表述 —— 少数派恰恰是这个产品最要呈现的。',
-  '6. 最终输出最多 15 条：优先覆盖不同子议题和冲突关系，再按讨论重要性排序；不要为了少于 15 条而过度合并。',
-  '输出 JSON：{"judgments":[{"text":"代表表述","sourceQuotes":["原话"],"answerIds":["回答id"]}]}。',
+  '1. 先按 topic 识别共同讨论的命题，输出的 text 要是一个中性、具体、可被多方回答的命题，而不是某一派的结论。',
+  '2. 同一命题下的赞成、反对、条件赞成、风险保留、前提质疑，都合并到同一个 judgment；把它们作为不同 faction 交给 03 取向，保留多峰分布。相反结论本身不是拆分理由。',
+  '3. 只有对象、人群、前提条件、时间范围、因果链或价值权衡发生变化，才拆成不同 judgment。不要把“AI 应该强制标注”和“不需要强制标注”拆开，它们属于同一命题的两端。',
+  '4. 禁止用“要综合看”“各有道理”这类宽泛上位句吞掉细分分歧；factionHints 写出该命题下从原话中确认的 2–4 个立场家族，不要凭空制造派系。',
+  '5. 合并时保留全部来源：answerIds 必须是被合并判断的原 answerId，sourceQuotes 从被合并判断的 quote 里取。一个 answerId 可以同时参与多个不同 judgment，但同一命题的不同 faction 应留在同一 judgment。',
+  '6. 不做立场裁决、不改写含义、不丢弃少数派表述；最终最多 15 条，优先覆盖不同命题，并确保每个命题的主要派系都有来源。',
+  '输出 JSON：{"judgments":[{"text":"具体判断","factionHints":["派系A","派系B"],"sourceQuotes":["原话"],"answerIds":["回答id"]}]}。',
 ].join('\n')
 
 /* ---------------------------- 03 取向 Agent ---------------------------- */
@@ -497,6 +506,8 @@ const Placement = z.object({
   reason: z.string().min(4).max(240),
   /** 该答主支持其归位的原话 */
   quote: z.string().min(2).max(300),
+  /** 内部派系标签，仅用于校验和日志，不进入 API 契约 */
+  faction: z.string().min(2).max(60).optional(),
 })
 
 const OrientOut = z.object({
@@ -512,10 +523,12 @@ const ORIENT_SYSTEM = [
   '硬约束（违反任何一条即视为无效输出）：',
   '1. semanticAxis 的两端定义必须由这条判断的内容推导，禁止预设「正方/反方」「支持/反对」这类立场词。',
   '2. 每个归位必须给出 reason（绑定回答原文的理由）与 quote（原话），无理由不采纳。',
-  '3. 允许归入中间档（slot 3），不强迫站边；确实无明确立场的回答直接不要归位。',
-  '4. slot 1 = 左端，slot 5 = 右端（scaleDirection 固定 left_to_right，由系统写入，你不用输出）。',
-  '5. slot 只表示这条判断内部的相对位置，不具备跨判断语义；不要对 slot 做任何跨判断比较或聚合。',
-  '输出 JSON：{"semanticAxis":{"left":"…","right":"…"},"placements":[{"answerId":"…","slot":1,"reason":"…","quote":"…"}]}。',
+  '3. 先在脑中列出这条判断里 2–4 个真实存在的 faction（立场家族）：例如无条件支持、有条件支持、认为前提不成立、强调代价/风险、主张换一套衡量标准。faction 不是简单的左右标签，必须由原话概括；没有证据的派系不要创造。',
+  '4. 再把每条回答按它的主要 faction 归入 1–5 档；同一判断出现两个以上明显峰值时必须保留多峰，不得把少数派全部挤进中间档。条件式、让步式回答可放在中间或偏端，但理由必须引用原话。',
+  '5. 允许归入中间档（slot 3），不强迫站边；确实无明确立场的回答直接不要归位。',
+  '6. slot 1 = 左端，slot 5 = 右端（scaleDirection 固定 left_to_right，由系统写入，你不用输出）。',
+  '7. slot 只表示这条判断内部的相对位置，不具备跨判断语义；不要对 slot 做任何跨判断比较或聚合。',
+  '输出 JSON：{"semanticAxis":{"left":"…","right":"…"},"placements":[{"answerId":"…","slot":1,"faction":"派系标签","reason":"…","quote":"…"}]}。',
 ].join('\n')
 
 /* ------------------------------ Agent 实现 ------------------------------ */
@@ -692,7 +705,13 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
         return true
       })
       if (dropped > 0) ctx.note('extract.dropped', { dropped, kept: kept.length })
-      return kept
+      return kept.map((j) => ({
+        text: j.text,
+        quote: j.quote,
+        answerId: j.answerId,
+        topicHint: j.topic,
+        factionHint: j.faction,
+      }))
     },
 
     /* ---------------- 02 归并：单路串行 ---------------- */
@@ -700,6 +719,8 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       const payload = items.map((it, i) => ({
         id: `x${i + 1}`,
         text: it.text,
+        topic: it.topicHint,
+        faction: it.factionHint,
         quote: it.quote,
         answerId: it.answerId,
       }))
@@ -728,6 +749,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
 
       const payload = {
         judgment: judgment.text,
+        factions: judgment.factionHints ?? [],
         answers: pool.map((a) => ({
           answerId: a.answerId,
           content: truncate(a.content, contentLimit),

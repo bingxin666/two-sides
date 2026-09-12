@@ -40,6 +40,9 @@ export interface ExtractedJudgment {
   text: string
   quote: string
   answerId: string
+  /** 提取阶段给归并阶段的内部语义线索，不出库 */
+  topicHint?: string
+  factionHint?: string
 }
 
 /** 02 归并的产物：去重后的判断议题 */
@@ -49,6 +52,8 @@ export interface MergedJudgment {
   sourceQuotes: string[]
   /** 参与该议题的回答 id（供 03 取原文做归位） */
   answerIds: string[]
+  /** 同一议题下模型识别出的立场派系，供取向阶段生成多峰分布；不出库 */
+  factionHints?: string[]
   /** 相关回答下提出不同看法的精选评论条数（独立字段，不进分布） */
   commentChallengeCount?: number
 }
@@ -176,7 +181,7 @@ export async function delayOrThrow(ms: number, signal?: AbortSignal): Promise<vo
   if (signal?.aborted) throw new PipelineError('aborted', 'timeout', 'extract', true)
 }
 
-/** 简易信号量：扇出阶段控并发（docs/03 §4.1：提取 4、取向 6） */
+/** 简易信号量：扇出阶段控并发（默认提取 30、取向 100，具体由 env 配置） */
 export class Semaphore {
   private active = 0
   private queue: Array<() => void> = []
