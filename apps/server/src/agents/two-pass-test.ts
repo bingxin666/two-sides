@@ -9,7 +9,7 @@ const oldCwd = process.cwd()
 const dir = mkdtempSync(join(resolve(tmpdir()), 'two-sides-two-pass-'))
 writeFileSync(join(dir, '.env'), '')
 process.chdir(dir)
-const calls: Array<{ agent: string; payload: any }> = []
+const calls: Array<{ agent: string; payload: any; maxTokens?: number; system?: string }> = []
 let mode: 'discover' | 'classify' = 'discover'
 mock.module('./llm', () => ({ createLlmAgents: () => ({
   fetchAnswers: async () => ({ question: '', answers: [] }), extract: async () => [], merge: async () => [],
@@ -18,7 +18,7 @@ mock.module('./llm', () => ({ createLlmAgents: () => ({
 mock.module('../llm/provider', () => ({
   callAgent: async (agent: string, opts: any) => {
     const payload = JSON.parse(opts.messages[1].content)
-    calls.push({ agent, payload })
+    calls.push({ agent, payload, maxTokens: opts.maxTokens, system: opts.messages[0].content })
     const out = mode === 'discover'
       ? { topics: [
         { text: '成本是否值得', semanticAxis: { left: '成本过高', right: '收益足够', }, evidence: [{ answerId: 'a1', quote: '成本值得投入。' }] },
@@ -49,6 +49,8 @@ try {
   const agents = createTwoPassAgents()
   const topics = await agents.discoverTopics!("测试题", answers, ctx)
   assert.deepEqual(topics.map((topic) => topic.id), ['j1', 'j2'])
+  assert.equal(calls[0]!.maxTokens, 1_200)
+  assert.match(calls[0]!.system!, /8 个是硬上限/)
   assert.equal(calls[0]!.payload.answers.length, answers.length)
   assert.equal(calls[0]!.payload.answers[0].content, answers[0].content)
   mode = 'classify'
@@ -60,6 +62,7 @@ try {
   const unmatched = await agents.classifyAnswer!(topics, answers[2], ctx)
   assert.deepEqual(unmatched, { answerId: 'a3', placements: [] })
   assert.equal(calls.filter((call) => call.agent === 'orient').length, 2)
+  assert.equal(calls.find((call) => call.agent === 'orient')!.maxTokens, 3_000)
   console.log('two-pass tests passed')
 } finally {
   process.chdir(oldCwd)
