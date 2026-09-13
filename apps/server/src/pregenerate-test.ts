@@ -294,7 +294,7 @@ async function main(): Promise<void> {
       assert.equal(bootDone, false)
       release()
       await Promise.all([boot, first])
-      await eventually(() => timers.length === 2)
+      await eventually(() => timers.length >= 2)
       assert.equal(fetchCount, 1)
       assert.equal(repo.listReadyHot(date).length, 3)
       for (const qid of responseQids) assert.equal(repo.getAnalysis(date, qid)?.attempts, 1)

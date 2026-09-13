@@ -15,7 +15,7 @@
     "merge:test": "bun --no-env-file run src/merge-test.ts",
     "llm-budget:test": "bun --no-env-file run src/llm-budget-test.ts",
     "pipeline-budget:test": "bun --no-env-file run src/pipeline-budget-test.ts",
-    "regression:test": "bun run pregenerate:test && bun run merge:test && bun run llm-budget:test && bun run pipeline-budget:test",
+    "regression:test": "bun run pregenerate:test && bun run merge:test && bun run llm-budget:test && bun run pipeline-budget:test && bun --no-env-file run src/agents/two-pass-test.ts",
     "pipeline:test": "bun run src/pipeline-test.ts"
   },
   "dependencies": {

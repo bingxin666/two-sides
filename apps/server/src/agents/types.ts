@@ -65,6 +65,19 @@ export interface OrientedJudgment extends Judgment {
   relatedAnswerIds: string[]
 }
 
+/** First pass fixes the same neutral topics and axes for every answer classifier. */
+export interface CommonTopic {
+  id: string
+  text: string
+  semanticAxis: { left: string; right: string }
+}
+
+/** One answer may discuss several topics, or explicitly match none. */
+export interface AnswerClassification {
+  answerId: string
+  placements: Array<{ topicId: string; slot: 1 | 2 | 3 | 4 | 5; quote: string; reason: string }>
+}
+
 export interface SummarizeResult {
   summary?: string
   source?: SummarySource
@@ -109,6 +122,10 @@ export interface MergedQuestionInfo {
 }
 
 export interface PipelineAgents {
+  /** Two-pass agents use the complete fetched answer pool once to discover topics. */
+  discoverTopics?(question: string, answers: RawAnswer[], ctx: PipelineContext): Promise<CommonTopic[]>
+  /** Independent calls per answer, with the same topic list and fixed axes. */
+  classifyAnswer?(topics: CommonTopic[], answer: RawAnswer, ctx: PipelineContext): Promise<AnswerClassification>
   /**
    * 内容获取：题目标题 + 内容池 + 薄样本救援合并的来源题清单。
    * mergedQuestions 仅在触发救援合并（主池 < 5）且实际并入 ≥1 题时非空，

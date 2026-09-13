@@ -104,6 +104,14 @@ export const Analysis = z.object({
   date: DateKey,
   /** 实际纳入的回答「条数」（不是人数），用于头部诚实声明「基于 N 条回答」 */
   sampleCount: z.number().int().nonnegative(),
+  /** Ready analysis can precede its optional background interpretation. Missing = legacy snapshot. */
+  summaryStatus: z.enum(['pending', 'ready', 'unavailable']).optional(),
+  /** Unique answer counts; unmatched is an explicit model decision, failed is not. */
+  classification: z.object({
+    matchedAnswerCount: z.number().int().nonnegative(),
+    unmatchedAnswerCount: z.number().int().nonnegative(),
+    failedAnswerCount: z.number().int().nonnegative(),
+  }).optional(),
   /** 10–15 条；participantCount === 0 的判断在后端就被丢弃，不出现在这里 */
   judgments: z.array(Judgment),
   /**

@@ -15,9 +15,9 @@ const props = withDefaults(defineProps<{ progress?: ProgressResp | null }>(), { 
 const emit = defineEmits<{ (e: 'cancel'): void }>()
 
 const STAGES: { key: Stage; no: string; label: string }[] = [
-  { key: 'extract', no: '01', label: '提取判断' },
-  { key: 'merge', no: '02', label: '归并去重' },
-  { key: 'orient', no: '03', label: '取向归位' },
+  { key: 'extract', no: '01', label: '读取回答' },
+  { key: 'merge', no: '02', label: '提炼议题' },
+  { key: 'orient', no: '03', label: '归类立场' },
   { key: 'render', no: '04', label: '生成光谱' },
 ]
 
@@ -27,6 +27,12 @@ const stageIndex = computed(() => {
 })
 
 const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
+const lead = computed(() => {
+  if (sampleCount.value <= 0) return '正在检索相关回答'
+  if (props.progress?.stage === 'orient') return `正在为 ${sampleCount.value} 条回答归类立场`
+  if (props.progress?.stage === 'render') return '正在整理各个议题的光谱'
+  return `正在综合 ${sampleCount.value} 条回答提炼议题`
+})
 </script>
 
 <template>
@@ -34,8 +40,7 @@ const sampleCount = computed(() => props.progress?.sampleCount ?? 0)
     <div class="t1__inner">
       <div class="t1__main">
         <!-- sampleCount 未就绪时诚实降级，不显示「从 0 条回答」 -->
-        <p v-if="sampleCount > 0" class="t1__lead">正在从 {{ sampleCount }} 条回答中提炼判断</p>
-        <p v-else class="t1__lead">正在检索相关回答</p>
+        <p class="t1__lead">{{ lead }}</p>
 
         <ol class="t1__stages">
           <li

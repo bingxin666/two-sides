@@ -17,7 +17,7 @@ import FailedCard from '@/components/status/FailedCard.vue'
 const route = useRoute()
 const router = useRouter()
 const store = useAnalysisStore()
-const { phase, analysis, progress, error, selectedJudgmentId } = storeToRefs(store)
+const { phase, analysis, progress, error, selectedJudgmentId, summaryPolling } = storeToRefs(store)
 const veilPanX = ref(0)
 
 const qid = computed(() => String(route.params.qid ?? ''))
@@ -146,6 +146,12 @@ watch(
           :title="`样本合并自以下提问：\n${mergedTitles}`"
         >（含 {{ mergedCount }} 个相关提问的回答）</span>
       </p>
+      <p v-if="analysis?.classification" class="qhead__meta">
+        <span v-if="analysis.classification.unmatchedAnswerCount > 0">{{ analysis.classification.unmatchedAnswerCount }}条未涉及这些议题</span>
+        <span v-if="analysis.classification.unmatchedAnswerCount > 0 && analysis.classification.failedAnswerCount > 0"> · </span>
+        <span v-if="analysis.classification.failedAnswerCount > 0">{{ analysis.classification.failedAnswerCount }}条暂未完成归类</span>
+      </p>
+      <p v-if="summaryPolling" class="qhead__meta" role="status">刘看山解读正在生成</p>
     </header>
 
     <VeilGlass :height="veilHeight" :pan-x="veilPanX">

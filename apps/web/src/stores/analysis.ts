@@ -25,6 +25,9 @@ const POLL_BACKOFF_EVERY = 8
 const POLL_DEADLINE_MS = 5 * 60_000
 /** 连续网络异常多少次后放弃（转成 failed-ish 提示，不再空转）；任何一次成功即清零 */
 const MAX_NET_ERRORS = 5
+const SUMMARY_POLL_MS = 2000
+const SUMMARY_DEADLINE_MS = 60_000
+const SUMMARY_MAX_ERRORS = 3
 
 function makeError(code: ErrorCode): ProgressError {
   const copy = ERROR_COPY[code]
@@ -53,6 +56,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
   const progress = ref<ProgressResp | null>(null) // 202 时的进度体
   const error = ref<ProgressError | null>(null) // 202 且 status === 'failed' 时的 error
   const selectedJudgmentId = ref<string | null>(null)
+  const summaryPolling = ref(false)
 
   /**
    * 轮询现场：
@@ -69,8 +73,15 @@ export const useAnalysisStore = defineStore('analysis', () => {
   let rounds = 0
   let netErrors = 0
   let polling = false
+  let summaryStartAt = 0
+  let summaryErrors = 0
+  let summaryDeadlineTimer: ReturnType<typeof setTimeout> | null = null
 
   function stopTimers(): void {
+    if (summaryDeadlineTimer !== null) {
+      clearTimeout(summaryDeadlineTimer)
+      summaryDeadlineTimer = null
+    }
     if (timer !== null) {
       clearTimeout(timer)
       timer = null
@@ -85,11 +96,13 @@ export const useAnalysisStore = defineStore('analysis', () => {
   function cancelPolling(): void {
     generation += 1
     polling = false
+    summaryPolling.value = false
     stopTimers()
   }
 
   function settle(): void {
     polling = false
+    summaryPolling.value = false
     stopTimers()
   }
 
@@ -104,6 +117,61 @@ export const useAnalysisStore = defineStore('analysis', () => {
     // 404：qid 非法或非问答页 —— 请求本身不可满足，not_found 且永不给重试按钮
     if (e instanceof ApiError && (e.status === 404 || e.code === 404)) return makeError('not_found')
     return makeError('zhihu_error')
+  }
+
+  /** Ready snapshots stay visible while optional interpretation catches up. */
+  function scheduleSummary(qid: string, my: number, title: string | undefined): void {
+    if (my !== generation || !summaryPolling.value) return
+    const remaining = SUMMARY_DEADLINE_MS - (Date.now() - summaryStartAt)
+    if (remaining <= 0 || summaryErrors >= SUMMARY_MAX_ERRORS) {
+      settle()
+      return
+    }
+    timer = setTimeout(() => {
+      timer = null
+      void runSummaryRound(qid, my, title)
+    }, Math.min(SUMMARY_POLL_MS, remaining))
+  }
+
+  function startSummaryPolling(qid: string, my: number, title: string | undefined): void {
+    summaryStartAt = Date.now()
+    summaryErrors = 0
+    polling = true
+    summaryPolling.value = true
+    // The independent deadline also cancels a request that is still in flight.
+    summaryDeadlineTimer = setTimeout(() => { if (my === generation) settle() }, SUMMARY_DEADLINE_MS)
+    scheduleSummary(qid, my, title)
+  }
+
+  async function runSummaryRound(qid: string, my: number, title: string | undefined): Promise<void> {
+    if (my !== generation || !summaryPolling.value) return
+    const ctrl = new AbortController()
+    controller = ctrl
+    try {
+      const res = await getAnalysis(qid, {
+        signal: ctrl.signal, title,
+        timeoutMs: Math.max(1, Math.min(8000, SUMMARY_DEADLINE_MS - (Date.now() - summaryStartAt))),
+      })
+      if (my !== generation || !summaryPolling.value || ctrl.signal.aborted) return
+      if (isSnapshot(res) && res.qid === qid && res.date === analysis.value?.date) {
+        analysis.value = res
+        summaryErrors = 0
+        if (res.summaryStatus !== 'pending') {
+          settle()
+          return
+        }
+      } else {
+        // A regeneration or unexpected response cannot replace the ready view.
+        summaryErrors += 1
+      }
+      scheduleSummary(qid, my, title)
+    } catch (e) {
+      if (my !== generation || !summaryPolling.value || ctrl.signal.aborted) return
+      summaryErrors += 1
+      scheduleSummary(qid, my, title)
+    } finally {
+      if (controller === ctrl) controller = null
+    }
   }
 
   function scheduleNext(qid: string, my: number, title: string | undefined): void {
@@ -137,6 +205,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
         error.value = null
         phase.value = 'ready'
         settle()
+        if (res.summaryStatus === 'pending') startSummaryPolling(qid, my, title)
         return
       }
 
@@ -176,8 +245,14 @@ export const useAnalysisStore = defineStore('analysis', () => {
    */
   async function load(qid: string, opts?: { title?: string }): Promise<void> {
     const title = opts?.title
-    // 同 qid 且同 title：已就绪或仍在轮询中 → 直接返回，不重复触发
-    if (currentQid === qid && currentTitle === (title ?? null) && (phase.value === 'ready' || polling)) return
+    // Reopening a pending ready snapshot resumes only its optional background work.
+    if (currentQid === qid && currentTitle === (title ?? null)) {
+      if (phase.value === 'ready') {
+        if (analysis.value?.summaryStatus === 'pending' && !polling) startSummaryPolling(qid, generation, title)
+        return
+      }
+      if (polling) return
+    }
 
     cancelPolling()
     const my = generation
@@ -250,6 +325,7 @@ export const useAnalysisStore = defineStore('analysis', () => {
     progress,
     error,
     selectedJudgmentId,
+    summaryPolling,
     load,
     retry,
     select,

@@ -8,7 +8,7 @@
  */
 
 import { getDb } from './db'
-import type { JobStatus, Stage, ErrorCode } from '@two-sides/contract'
+import type { Analysis, JobStatus, Stage, ErrorCode, SummarySource } from '@two-sides/contract'
 import { nowIso } from './time'
 
 export interface AnalysisRow {
@@ -300,6 +300,78 @@ export function markReady(
     s().updateJobStatus.run('ready', nowIso(), jobId, date, qid)
   })
   tx()
+}
+
+/** Exact immutable identity of the ready snapshot a background summary owns. */
+export interface ReadySummaryVersion {
+  jobId: string
+  date: string
+  qid: string
+  attempts: number
+  data: string
+}
+
+export interface ReadySummaryResult {
+  summary: string
+  source: SummarySource
+}
+
+function summarySnapshot(data: string, result?: ReadySummaryResult): string | null {
+  let analysis: Analysis
+  try { analysis = JSON.parse(data) as Analysis } catch { return null }
+  if (analysis.summaryStatus !== 'pending' || !Array.isArray(analysis.judgments)) return null
+  return JSON.stringify({
+    ...analysis,
+    summaryStatus: result ? 'ready' : 'unavailable',
+    judgments: analysis.judgments.map(({ summary: _summary, summarySource: _source, ...judgment }) => ({
+      ...judgment,
+      ...(result ? { summary: result.summary, summarySource: result.source } : {}),
+    })),
+  })
+}
+
+/** A late summary must never mutate a new run, even when its qid/date match. */
+export function patchReadySummary(version: ReadySummaryVersion, result?: ReadySummaryResult): boolean {
+  const data = summarySnapshot(version.data, result)
+  if (data === null) return false
+  return getDb().query(`
+    UPDATE analyses SET data = ?, updated_at = ?
+      WHERE date = ? AND qid = ? AND status = 'ready' AND attempts = ? AND data = ?
+        AND EXISTS (SELECT 1 FROM jobs WHERE id = ? AND date = analyses.date
+          AND qid = analyses.qid AND attempts = analyses.attempts AND status = 'ready')
+  `).run(data, nowIso(), version.date, version.qid, version.attempts, version.data, version.jobId).changes === 1
+}
+
+/** Grace exceeds the background queue's 12s total budget, including queue wait. */
+export const SUMMARY_STALE_MS = 60_000
+
+function expireSummaryRow(row: AnalysisRow, now: number): boolean {
+  if (row.status !== 'ready' || !row.data) return false
+  const updatedAt = Date.parse(row.updated_at)
+  if (Number.isFinite(updatedAt) && now - updatedAt <= SUMMARY_STALE_MS) return false
+  const data = summarySnapshot(row.data)
+  if (data === null) return false
+  // No task is relaunched. CAS on the whole row version also handles an orphaned
+  // ready snapshot after a restart; a newer run/summary cannot be overwritten.
+  return getDb().query(`UPDATE analyses SET data = ?, updated_at = ?
+    WHERE date = ? AND qid = ? AND status = 'ready' AND attempts = ?
+      AND data = ? AND updated_at = ?`).run(data, new Date(now).toISOString(),
+      row.date, row.qid, row.attempts, row.data, row.updated_at).changes === 1
+}
+
+/** GET repair: recent pending data remains a pure read, including other processes' work. */
+export function getAnalysisWithFreshSummary(date: string, qid: string, now = Date.now()): AnalysisRow | null {
+  const row = getAnalysis(date, qid)
+  if (row && expireSummaryRow(row, now)) return getAnalysis(date, qid)
+  return row
+}
+
+/** Startup recovery expires only abandoned pending summaries, never spends new API quota. */
+export function recoverStaleSummaries(now = Date.now()): number {
+  const rows = getDb().query<AnalysisRow, []>(`SELECT * FROM analyses
+    WHERE status = 'ready' AND data IS NOT NULL AND json_valid(data)
+      AND json_extract(data, '$.summaryStatus') = 'pending'`).all()
+  return rows.reduce((count, row) => count + Number(expireSummaryRow(row, now)), 0)
 }
 
 export interface FailInput {

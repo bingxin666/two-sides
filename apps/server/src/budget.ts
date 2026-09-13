@@ -2,7 +2,7 @@ import { PipelineError, type PipelineContext } from './agents/types'
 import type { Stage } from '@two-sides/contract'
 import { log } from './log'
 
-export type PipelinePhase = 'fetchAnswers' | 'extract' | 'merge' | 'orient' | 'summary'
+export type PipelinePhase = 'fetchAnswers' | 'extract' | 'merge' | 'orient' | 'summary' | 'discoverTopics' | 'classifyAnswers'
 
 // At the default 180s job limit, protect the necessary downstream stages.
 // Shorter configured jobs scale reserves proportionally; caps remain upper bounds.
@@ -12,6 +12,8 @@ export const PHASE_BUDGETS = {
   merge: { capMs: 75_000, reserveMs: 40_000 },
   orient: { capMs: 45_000, reserveMs: 2_000 },
   summary: { capMs: 12_000, reserveMs: 1_000 },
+  discoverTopics: { capMs: 30_000, reserveMs: 31_000 },
+  classifyAnswers: { capMs: 30_000, reserveMs: 1_000 },
 } as const
 
 /** One absolute deadline for the whole phase, shared by all concurrent units. */
@@ -27,7 +29,8 @@ export async function runWithBudget<T>(
     Date.now() + capMs,
     (ctx.deadlineAt ?? Infinity) - reserveMs * reserveScale,
   )
-  const stage: Stage = phase === 'fetchAnswers' ? 'extract' : phase === 'summary' ? 'render' : phase
+  const stage: Stage = phase === 'fetchAnswers' ? 'extract' : phase === 'summary' ? 'render'
+    : phase === 'discoverTopics' ? 'merge' : phase === 'classifyAnswers' ? 'orient' : phase
   const timeout = () => new PipelineError(`${phase} budget exhausted`, 'timeout', stage, true)
   const controller = new AbortController()
   let timer: ReturnType<typeof setTimeout> | undefined

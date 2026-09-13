@@ -32,6 +32,7 @@ import {
   setAnalysisStatus,
   setJobStatus,
   updateJobProgress,
+  recoverStaleSummaries,
   type AnalysisRow,
   type JobRow,
   type ProgressPatch,
@@ -40,6 +41,8 @@ import { parseIso, shiftDateKey, todayKey } from './time'
 import { resolveQuestionTitle } from './zhihu/title'
 import type { PipelineContext } from './agents/types'
 import { PipelineError } from './agents/types'
+import { enqueueBackgroundSummary } from './summary-background'
+import type { OrientedJudgment, RawAnswer } from './agents/types'
 
 /** 本进程标识：写入 jobs.owner，重启恢复与诊断用 */
 export const PROCESS_ID = randomUUID().slice(0, 8)
@@ -205,7 +208,14 @@ async function runJob(date: string, qid: string, job: JobRow, titleHint?: string
     setJobStatus(job.id, date, qid, 'generating')
     log.info('job.start', { qid, date, jobId: job.id, attempts: job.attempts, mode: env.PIPELINE_MODE })
 
-    const analysis = await runPipeline(createAgents(env.PIPELINE_MODE), ctx)
+    let deferredAnswers: RawAnswer[] | undefined
+    let deferredJudgments: OrientedJudgment[] | undefined
+    const analysis = await runPipeline(createAgents(env.PIPELINE_MODE), ctx, {
+      deferSummary(answers, judgments) {
+        deferredAnswers = answers
+        deferredJudgments = judgments
+      },
+    })
     if (controller.signal.aborted || Date.now() >= deadlineAt) {
       fail(job, job.attempts, {
         code: 'timeout',
@@ -224,6 +234,15 @@ async function runJob(date: string, qid: string, job: JobRow, titleHint?: string
       { ...progress, stage: 'render', stageRatio: 1, detail: notes.slice(-20) },
     )
     log.info('job.ready', { qid, date, judgments: analysis.judgments.length, elapsedMs: Math.round(performance.now() - started) })
+    if (deferredAnswers && deferredJudgments && analysis.summaryStatus === 'pending') {
+      enqueueBackgroundSummary({
+        job,
+        analysis,
+        agents: createAgents(env.PIPELINE_MODE),
+        answers: deferredAnswers,
+        judgments: deferredJudgments,
+      })
+    }
   } catch (e) {
     const mapped = classify(e, timedOut || controller.signal.aborted, progress.stage)
     fail(job, job.attempts, { ...mapped, detail: [...notes.slice(-20), { event: 'error', ...errFields(e) }] })
@@ -342,6 +361,12 @@ export function abort(date: string, qid: string): boolean {
 /** 启动时重入队当日未完成的 job，并清理 7 天前数据 */
 export function recoverOnBoot(): void {
   const date = todayKey()
+  try {
+    const expired = recoverStaleSummaries()
+    if (expired > 0) log.info('summary.background.recovered', { date, expired })
+  } catch (e) {
+    log.warn('summary.background.recoverFailed', { date, ...errFields(e) })
+  }
   try {
     purgeBefore(shiftDateKey(date, -7))
   } catch (e) {

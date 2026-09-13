@@ -16,7 +16,7 @@ import { Analysis as AnalysisSchema, ProgressResp as ProgressRespSchema } from '
 import { failResp, okData } from '../http'
 import { inCooldown, readProgress, restart, startRunner, tryAcquire } from '../jobs'
 import { log } from '../log'
-import { getAnalysis } from '../repo'
+import { getAnalysis, getAnalysisWithFreshSummary } from '../repo'
 import { todayKey } from '../time'
 
 export const analysisRoutes = new Hono()
@@ -40,7 +40,7 @@ function titleHintOf(raw: string | undefined): string | undefined {
 
 /** 取出 ready 快照；解析失败视为未命中（会触发重跑） */
 function readyAnalysis(qid: string, date: string) {
-  const row = getAnalysis(date, qid)
+  const row = getAnalysisWithFreshSummary(date, qid)
   if (!row || row.status !== 'ready' || !row.data) return null
   try {
     const parsed = AnalysisSchema.safeParse(JSON.parse(row.data))
