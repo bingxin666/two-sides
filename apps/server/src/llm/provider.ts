@@ -167,6 +167,8 @@ export interface CallOptions<T> {
   jsonMode?: boolean
   temperature?: number
   maxTokens?: number
+  /** OpenAI-compatible reasoning effort for reasoning models. Defaults to env setting. */
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
   timeoutMs?: number
   deadlineAt?: number
   maxAttempts?: number
@@ -244,6 +246,7 @@ export async function callAgent<T = string>(
         jsonMode: opts.jsonMode,
         temperature: opts.temperature,
         maxTokens: opts.maxTokens,
+        reasoningEffort: opts.reasoningEffort ?? env.LLM_REASONING_EFFORT,
         timeoutMs: opts.timeoutMs,
         deadlineAt,
         maxAttempts: pathAttempts,

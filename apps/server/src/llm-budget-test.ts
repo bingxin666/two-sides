@@ -32,7 +32,7 @@ writeFileSync(configPath, JSON.stringify({
     summaryFallback: { provider: 'primary', model: 'test', fallback: { provider: 'backup', model: 'test' } },
   },
 }))
-mock.module('./env', () => ({ env: { LLM_RPM_LIMIT: 100_000, PROVIDERS_CONFIG: configPath },
+mock.module('./env', () => ({ env: { LLM_RPM_LIMIT: 100_000, PROVIDERS_CONFIG: configPath, LLM_REASONING_EFFORT: 'low' },
   hasEnv: (name: string) => !!process.env[name],
   zhihuSecretStatus: () => ({ configured: false, length: 0, sha256: '' }) }))
 mock.module('./zhihu/title', () => ({ resolveQuestionTitle: () => { throw new Error('unexpected title/DB access') },
@@ -154,6 +154,15 @@ try {
     assert(result.latencyMs >= 40)
     assert.equal(result.attempts, 1)
     assert.equal(sentSignal?.aborted, true)
+  })
+  await check('provider sends configured low reasoning effort', async () => {
+    fetcher = async (_url, init) => {
+      assert.equal(JSON.parse(String(init?.body)).reasoning_effort, 'low')
+      return response('ok', 5)
+    }
+    const result = await callAgent('extract', { messages: base.messages, deadlineAt: Date.now() + 500,
+      context: { qid: 'reasoning', date: '2026-09-13', stage: 'extract', unit: 'reasoning-test' } })
+    assert.equal(result.content, 'ok')
   })
   await check('shared three attempts include two primary calls and one fallback', async () => {
     const tokenStart = llmCounters.tokens

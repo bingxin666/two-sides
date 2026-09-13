@@ -147,6 +147,7 @@ pnpm build      # 全 workspace 构建
 | `ANALYSIS_RETRY_COOLDOWN_SEC` | 可选 | `60` | `failed` 后再试的冷却窗口，防连点打穿额度 |
 | `ANALYSIS_JOB_TIMEOUT_SEC` | 可选 | `180` | 单 job 总时限，超时置 `timeout` |
 | `LLM_RPM_LIMIT` | 可选 | `1000` | 全局令牌桶；提取/取向默认并发提高后，仍以此限制总请求速率，可按服务商承载调低 |
+| `LLM_REASONING_EFFORT` | 可选 | `low` | OpenAI 兼容推理模型思考强度；支持 `low`/`medium`/`high`/`xhigh`，降低可减少延迟和输出 token |
 | `PIPELINE_EXTRACT_CONCURRENCY` | 可选 | `30` | 单题提取批次并发；按服务商承载调节 |
 | `PIPELINE_ORIENT_CONCURRENCY` | 可选 | `100` | 单题取向并发；按服务商承载调节 |
 | `PREGENERATE_CONCURRENCY` | 可选 | `4` | 热榜预生成 worker 数；完成一题立即补位，LLM 仍受全局令牌桶约束 |

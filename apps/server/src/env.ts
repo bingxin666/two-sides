@@ -83,6 +83,14 @@ function str(name: string, def: string): string {
   return raw === undefined || raw === '' ? def : raw
 }
 
+function reasoningEffort(name: string, def: 'low' | 'medium' | 'high' | 'xhigh' = 'low'):
+  'low' | 'medium' | 'high' | 'xhigh' {
+  const raw = process.env[name]
+  if (raw === undefined || raw === '') return def
+  const value = raw.toLowerCase()
+  return value === 'low' || value === 'medium' || value === 'high' || value === 'xhigh' ? value : def
+}
+
 function pipelineMode(): 'fake' | 'llm' {
   const raw = process.env.PIPELINE_MODE
   // 真实管线是默认路径；fake 只能通过显式 PIPELINE_MODE=fake 开启。
@@ -104,6 +112,8 @@ export const env = {
   /** 全局 LLM 令牌桶（req/min） */
   /** 全局 LLM 令牌桶上限；并发由各阶段信号量控制，令牌桶负责总吞吐 */
   LLM_RPM_LIMIT: num('LLM_RPM_LIMIT', 1000),
+  /** 推理模型思考强度；low 减少延迟与输出 token。 */
+  LLM_REASONING_EFFORT: reasoningEffort('LLM_REASONING_EFFORT', 'low'),
   /** 单题提取/取向并发；生产可按供应商承载调节 */
   PIPELINE_EXTRACT_CONCURRENCY: positiveNum('PIPELINE_EXTRACT_CONCURRENCY', 30),
   PIPELINE_ORIENT_CONCURRENCY: positiveNum('PIPELINE_ORIENT_CONCURRENCY', 100),

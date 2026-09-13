@@ -23,6 +23,8 @@ export interface ChatRequest {
   jsonMode?: boolean
   temperature?: number
   maxTokens?: number
+  /** OpenAI-compatible reasoning effort for reasoning models. */
+  reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
   /** Per-attempt limit; deadlineAt is the shared total limit. */
   timeoutMs?: number
   deadlineAt?: number
@@ -193,6 +195,7 @@ export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>>
         if (req.jsonMode) body.response_format = { type: 'json_object' }
         if (typeof req.temperature === 'number') body.temperature = req.temperature
         if (typeof req.maxTokens === 'number') body.max_tokens = req.maxTokens
+        if (req.reasoningEffort) body.reasoning_effort = req.reasoningEffort
         const encodedBody = JSON.stringify(body)
         const res = await abortable(() => {
           assertCallActive(req.signal, attemptDeadlineAt)
