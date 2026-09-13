@@ -23,7 +23,6 @@ import { log } from '../log'
 import { isLive, normalizeAuthority, questionIdFromUrl, search, ZhihuError, zhihuCounters, type ZhihuItem } from '../zhihu/client'
 import { resolveQuestionTitle, rememberHint } from '../zhihu/title'
 import {
-  delay,
   type ExtractedJudgment,
   MergedQuestionInfo,
   PipelineError,
@@ -129,8 +128,8 @@ function truncate(s: string, max: number): string {
 
 /* ------------------------ 薄样本救援合并（2026-09-12 用户拍板） ------------------------ */
 
-/** 救援触发闸：主问题回答池 < 5 条才启用；富题永不合并（爆炸半径锁死在老冷题） */
-const RESCUE_THRESHOLD = 5
+/** 救援触发闸：主问题回答池 < 3 条才启用；3 条及以上直接使用主问题结果。 */
+const RESCUE_THRESHOLD = 3
 /** Tier 2（LLM 裁决）并入上限 */
 const RESCUE_TIER2_MAX = 3
 /** 合并题总上限（含 Tier 1，契约 mergedQuestions max(4)） */
@@ -173,7 +172,7 @@ const RESCUE_SYSTEM = [
 ].join('\n')
 
 /**
- * 薄样本救援：主池 < 5 条时，把外题按两级闸门并入。
+ * 薄样本救援：主池 < 3 条时，把外题按两级闸门并入。
  * 返回合并后的回答（主问题回答永远在前）与来源题清单（如实写入快照，禁止静默）。
  */
 async function rescueMerge(
@@ -296,39 +295,45 @@ function toRawAnswer(it: ZhihuItem): RawAnswer | null {
   }
 }
 
-async function searchDedup(variants: string[], ctx: PipelineContext): Promise<ZhihuItem[]> {
+export async function searchDedup(variants: string[], ctx: PipelineContext): Promise<ZhihuItem[]> {
   const seen = new Map<string, ZhihuItem>()
-  for (let i = 0; i < variants.length; i++) {
-    if (ctx.signal.aborted || (ctx.deadlineAt !== undefined && Date.now() >= ctx.deadlineAt)) {
-      throw new PipelineError('search budget exhausted', 'timeout', 'extract', true)
-    }
-    const remainingMs = (ctx.deadlineAt ?? Infinity) - Date.now()
-    if (remainingMs <= 1_000) break
-    const v = variants[i]!
-    try {
-      // Count 上限 10：服务端 >10 截断、<=0 回退 10，这里显式传 10
-      const items = await search(v, 10, {
-        signal: AbortSignal.any([
-          ctx.signal,
-          AbortSignal.timeout(Math.max(1, Math.floor(Math.min(15_000, remainingMs - 1_000)))),
-        ]),
-      })
-      for (const it of items) {
-        const key = (it.ContentID ?? '').trim() || answerIdFromUrl(it.Url ?? '') || (it.Url ?? '').trim()
-        if (!key || seen.has(key)) continue
-        seen.set(key, it)
+  // 搜索是独立 I/O：最多两个并发 worker，避免四个变体的波次串行等待。
+  // 不再人为插入 300ms 间隔；知乎限流由请求层/全局令牌桶负责。
+  let next = 0
+  let lastError: unknown
+  const worker = async (): Promise<void> => {
+    while (true) {
+      const i = next++
+      if (i >= variants.length) return
+      if (ctx.signal.aborted || (ctx.deadlineAt !== undefined && Date.now() >= ctx.deadlineAt)) return
+      const remainingMs = (ctx.deadlineAt ?? Infinity) - Date.now()
+      if (remainingMs <= 1_000) return
+      const v = variants[i]!
+      try {
+        // Count 上限 10：服务端 >10 截断、<=0 回退 10，这里显式传 10
+        const items = await search(v, 10, {
+          signal: AbortSignal.any([
+            ctx.signal,
+            AbortSignal.timeout(Math.max(1, Math.floor(Math.min(15_000, remainingMs - 1_000)))),
+          ]),
+        })
+        for (const it of items) {
+          const key = (it.ContentID ?? '').trim() || answerIdFromUrl(it.Url ?? '') || (it.Url ?? '').trim()
+          if (!key || seen.has(key)) continue
+          seen.set(key, it)
+        }
+        ctx.note(`search.variant.${i}.ok`, { queryLen: v.length, got: items.length })
+      } catch (e) {
+        // 单变体失败不阻塞其余变体（任一变体成功即可继续）
+        lastError = e
+        const err = e instanceof ZhihuError ? e : null
+        ctx.note(`search.variant.${i}.failed`, { kind: err?.errorCode ?? 'unknown' })
       }
-      ctx.note(`search.variant.${i}.ok`, { queryLen: v.length, got: items.length })
-    } catch (e) {
-      // 单变体失败不阻塞其余变体（≥1 个变体成功即可继续）
-      const err = e instanceof ZhihuError ? e : null
-      ctx.note(`search.variant.${i}.failed`, { kind: err?.errorCode ?? 'unknown' })
-      if (i === variants.length - 1 && seen.size === 0) throw e
     }
-    // 变体间隔（2026-09-12 team-lead 批准）：run1 曾出现单变体 30001 频率限制，
-    // 200–400ms 错峰可显著降低概率，D2 预生成沿用
-    if (i < variants.length - 1) await delay(300, ctx.signal)
   }
+  const workerCount = Math.min(2, variants.length)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
+  if (seen.size === 0 && lastError !== undefined) throw lastError
   return [...seen.values()]
 }
 
@@ -742,7 +747,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
         return uqid !== null && uqid !== qid
       })
 
-      // ④ 薄样本救援合并：仅当主池 < 5 条时触发；富题永远走纯净单题路径。
+      // ④ 薄样本救援合并：仅当主池 < 3 条时触发；富题永远走纯净单题路径。
       //    主池为 0 的特殊锚点规则：老题在搜索上的可见性在 0–1 条之间波动
       //   （实测 330106513），若 0 即 failed，救援在最需要的场景永不触发。
       //   故允许 0 锚点救援，但**必须至少并入一个 Tier 1（标题逐字一致）题**
