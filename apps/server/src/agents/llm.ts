@@ -18,7 +18,6 @@
 import { z } from 'zod'
 import { callAgent } from '../llm/provider'
 import { llmCounters, parseJsonLoose, type ChatMessage } from '../llm/client'
-import { expandQueries } from '../llm/expand'
 import { log } from '../log'
 import { isLive, normalizeAuthority, questionIdFromUrl, search, ZhihuError, zhihuCounters, type ZhihuItem } from '../zhihu/client'
 import { resolveQuestionTitle, rememberHint } from '../zhihu/title'
@@ -694,7 +693,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
   }
 
   return {
-    /* ---------------- 内容获取：Query 变体并发 + 去重合并 ---------------- */
+    /* ---------------- 内容获取：单次问题搜索 ---------------- */
     async fetchAnswers(qid, ctx) {
       if (!isLive()) {
         throw new PipelineError(
@@ -722,16 +721,8 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       if (ctx.titleHint?.trim()) rememberHint(qid, ctx.titleHint)
 
       const question = title
-      // ② 查询生成：LLM 语义扩写（原句 + ≤3 个相似问法，2026-09-12 用户拍板，
-      //    替代已删除的 8 个机械后缀变体）。扩写失败/超时 → 退回仅原句（expand.degraded）。
-      const variants = await expandQueries(question, {
-        signal: ctx.signal,
-        deadlineAt: ctx.deadlineAt,
-        context: { qid: ctx.qid, date: ctx.date, stage: 'fetchAnswers' },
-      })
-
-      // ② 变体搜索 + 按 answerId 去重
-      const items = await searchDedup(variants, ctx)
+      // 用户提交的问题只触发一次知乎搜索；URL 校验和救援逻辑仍在下方执行。
+      const items = await search(question, 10, { signal: ctx.signal })
       const candidates = items
         .map(toRawAnswer)
         .filter((a): a is RawAnswer => a !== null)

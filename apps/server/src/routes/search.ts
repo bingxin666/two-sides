@@ -18,7 +18,6 @@ import { failResp, okData } from '../http'
 import { log } from '../log'
 import { cacheQuestionTitle } from '../repo'
 import { isLive, questionIdFromUrl, search, ZhihuError, type ZhihuItem } from '../zhihu/client'
-import { expandQueries } from '../llm/expand'
 
 export const searchRoutes = new Hono()
 
@@ -78,37 +77,16 @@ searchRoutes.get('/search', async (c) => {
   }
 
   try {
-    // 查询生成：LLM 语义扩写（原句 + ≤3 相似问法，3s 超时护栏，失败退回仅原句），
-    // 与管线 fetchAnswers 同一 expandQueries —— 用户输入流与预生成/懒生成同路径
-    const queries = await expandQueries(q, { timeoutMs: 3_000 })
-
-    // 多查询执行：所有扩写问法同时发起，单查询失败不阻塞其余（≥1 个成功即可），
-    // 条目按 ContentID/Url 去重。搜索是独立 I/O，并发等待可显著缩短首屏延迟。
+    // 用户提交的问题只触发一次知乎搜索。
+    const items = await search(q, 10)
     const seen = new Set<string>()
     const merged: ZhihuItem[] = []
-    let lastError: unknown = null
-    let okCount = 0
-    const results = await Promise.allSettled(queries.map((v) => search(v, 10)))
-    results.forEach((result, i) => {
-      const v = queries[i]!
-      if (result.status === 'fulfilled') {
-        // Count 上限 10：每查询一页，合并后足够挑出 ≤8 道去重后的题
-        for (const it of result.value) {
-          const k = (it.ContentID ?? '').trim() || (it.Url ?? '').trim()
-          if (!k || seen.has(k)) continue
-          seen.add(k)
-          merged.push(it)
-        }
-        okCount++
-      } else {
-        lastError = result.reason
-        log.warn('search.query.failed', {
-          query: v.slice(0, 80),
-          reason: result.reason instanceof Error ? result.reason.message.slice(0, 120) : String(result.reason).slice(0, 120),
-        })
-      }
-    })
-    if (okCount === 0) throw lastError ?? new ZhihuError('all search queries failed', 'zhihu_error', true)
+    for (const it of items) {
+      const k = (it.ContentID ?? '').trim() || (it.Url ?? '').trim()
+      if (!k || seen.has(k)) continue
+      seen.add(k)
+      merged.push(it)
+    }
 
     const byQuestion = new Map<string, string>()
     for (const it of merged) {
