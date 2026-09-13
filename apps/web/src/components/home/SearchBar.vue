@@ -22,8 +22,7 @@ export function questionIdFromInput(raw: string): string | null {
   }
   const host = parsed.hostname.toLowerCase()
   if (host !== 'zhihu.com' && !host.endsWith('.zhihu.com')) return null
-  const path = parsed.pathname.replace(/\/+$/, '')
-  const match = /^\/question\/(\d{1,20})$/.exec(path)
+  const match = /^\/question\/(\d{1,20})(?:\/|$)/.exec(parsed.pathname)
   return match?.[1] ?? null
 }
 
