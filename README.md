@@ -183,6 +183,7 @@ pnpm build      # 全 workspace 构建
 | `GET` | `/health` | `{ ok, date, quota }`，额度查询本身不消耗额度 |
 | `GET` | `/auth/zhihu/authorize` | 增强层 · 302 到知乎授权页 |
 | `GET` | `/auth/zhihu/callback` | 增强层 · 换 token（不留存，只取公开范围数据） |
+| `GET` | `/callback` | 公网 OAuth 回调别名（与活动页登记地址一致） |
 | `GET` | `/me/opposite` | 增强层 · 「光谱另一侧」推荐；未授权 `403` |
 
 > **进度不单独开端点**：进度就是 `202` 的响应体，前端只轮询一个 URL，状态机从三端点降到一端点。

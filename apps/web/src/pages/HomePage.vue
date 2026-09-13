@@ -2,8 +2,7 @@
 /**
  * N1 首页（docs/02 §3.3 布局）：品牌行 h100 · 光幕 h600 · 输入行 h100 · 声明行 h100
  * 热榜数据来自 GET /hot（只含已 ready），空态/缺数据如实提示，不白屏
- * 品牌行右侧「知乎授权登录」（设计稿 LoginBtn）：增强层（OAuth）条件模块，凭证未获批——
- * 点击如实告知，不假装能登录（docs/02 §8 诚实设计）。
+ * 品牌行右侧「知乎授权登录」跳转后端 OAuth；凭证未配置时后端返回明确错误。
  */
 import { onBeforeUnmount, onMounted, ref } from 'vue'
 import type { HotItem } from '@two-sides/contract'
@@ -16,17 +15,18 @@ import HonestFooter from '@/components/home/HonestFooter.vue'
 const items = ref<HotItem[]>([])
 const hotFailed = ref(false)
 
-/** 登录提示气泡：点击后短暂出现，自动消失 */
+/** 配置缺失或网络失败时的提示气泡 */
 const loginHint = ref(false)
 let hintTimer: ReturnType<typeof setTimeout> | undefined
 
 function onLogin() {
-  loginHint.value = true
-  if (hintTimer) clearTimeout(hintTimer)
-  hintTimer = setTimeout(() => {
-    loginHint.value = false
-    hintTimer = undefined
-  }, 2600)
+  if (import.meta.env.VITE_API_MODE === 'mock') {
+    loginHint.value = true
+    if (hintTimer) clearTimeout(hintTimer)
+    hintTimer = setTimeout(() => { loginHint.value = false; hintTimer = undefined }, 2600)
+    return
+  }
+  window.location.assign('/api/v1/auth/zhihu/authorize')
 }
 
 onMounted(async () => {
@@ -55,7 +55,7 @@ onBeforeUnmount(() => {
       <div class="home__login">
         <button type="button" class="home__login-btn" @click="onLogin">知乎授权登录</button>
         <p v-if="loginHint" class="home__login-hint" role="status">
-          知乎授权登录属增强层能力，OAuth 凭证获批后开放
+          当前为离线预览，OAuth 登录需使用 live 后端
         </p>
       </div>
     </header>

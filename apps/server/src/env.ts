@@ -117,6 +117,11 @@ export const env = {
   ZHIHU_LIVE: bool('ZHIHU_LIVE', false),
   ZHIHU_ZHIDA_MODEL: str('ZHIHU_ZHIDA_MODEL', 'zhida-thinking-1p5'),
 
+  /** OAuth 增强层：App ID 可公开，App Key 仅服务端使用；token 只进程内存。 */
+  ZHIHU_OAUTH_APP_ID: str('ZHIHU_OAUTH_APP_ID', ''),
+  ZHIHU_OAUTH_APP_KEY: str('ZHIHU_OAUTH_APP_KEY', ''),
+  ZHIHU_OAUTH_REDIRECT_URI: str('ZHIHU_OAUTH_REDIRECT_URI', ''),
+
   /** 管线实现选择：llm 默认；fake 仅在显式 PIPELINE_MODE=fake 时启用 */
   PIPELINE_MODE: pipelineMode(),
   /** fake 管线总时长（毫秒），留足时间给前端看轮询 */

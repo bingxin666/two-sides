@@ -24,6 +24,7 @@ import { analysisRoutes } from './routes/analysis'
 import { healthRoutes } from './routes/health'
 import { hotRoutes } from './routes/hot'
 import { searchRoutes } from './routes/search'
+import { authRoutes, publicCallbackRoutes } from './routes/auth'
 import { isLive } from './zhihu/client'
 import { todayKey } from './time'
 
@@ -47,6 +48,11 @@ app.route(API_V1, healthRoutes)
 app.route(API_V1, hotRoutes)
 app.route(API_V1, searchRoutes)
 app.route(API_V1, analysisRoutes)
+app.route(API_V1, authRoutes)
+
+// The public callback is also supported because the registered OAuth URI may
+// be https://<domain>/callback rather than the API-prefixed endpoint.
+app.route('/callback', publicCallbackRoutes)
 
 // 便捷别名（运维探活用），与契约路径指向同一实现
 app.route('/health', healthRoutes)

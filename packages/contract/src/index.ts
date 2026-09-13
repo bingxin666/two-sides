@@ -281,6 +281,8 @@ export const ENDPOINTS = {
   health: `${API_V1}/health`,
   zhihuAuthorize: `${API_V1}/auth/zhihu/authorize`,
   zhihuCallback: `${API_V1}/auth/zhihu/callback`,
+  zhihuStatus: `${API_V1}/auth/zhihu/status`,
+  zhihuLogout: `${API_V1}/auth/zhihu/logout`,
   meOpposite: (judgmentId: string) => `${API_V1}/me/opposite?judgmentId=${judgmentId}`,
 } as const
 

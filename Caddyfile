@@ -17,6 +17,11 @@
 		reverse_proxy server:3000
 	}
 
+	# OAuth provider callback (registered URI: https://<domain>/callback)
+	handle /callback {
+		reverse_proxy server:3000
+	}
+
 	# SPA 回退：非 /api 的未知路径交回 index.html，由 vue-router 接管
 	handle {
 		try_files {path} /index.html
