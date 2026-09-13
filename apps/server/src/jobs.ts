@@ -48,7 +48,7 @@ export const PROCESS_ID = randomUUID().slice(0, 8)
 const running = new Map<string, AbortController>()
 
 /** stale 判定宽限：job 总时限之外再给 30s，避免误抢还在跑的任务 */
-const STALE_GRACE_MS = 30_000
+export const STALE_GRACE_MS = 30_000
 
 /** 进度落库节流：避免高频写 SQLite */
 const PROGRESS_WRITE_MS = 400

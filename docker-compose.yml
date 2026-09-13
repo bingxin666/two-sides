@@ -41,8 +41,8 @@ services:
   # API 层：Bun + Hono + SQLite
   #
   # 每日预生成：进程内定时器（Bun timer 计算下一个 Asia/Shanghai 00:30），
-  # 单容器零依赖，取热榜前 PREGENERATE_TOP 题逐题分析落快照。
-  # 端点未实现前，快照由懒生成路径（GET /analysis 未命中隐式触发）自然填充。
+  # 启动时也检查当日热榜：缺失则后台补生成，已有候选则补未完成的题。
+  # 榜单和分析均持久化在 server-data 卷，重启复用当天结果。
   # ----------------------------------------------------------
   server:
     image: ghcr.io/${GHCR_OWNER:-bingxin666}/two-sides-server:${IMAGE_TAG:-master}
@@ -83,7 +83,7 @@ services:
       ZHIDUAN_DB_PATH: /app/data/two-sides.db
       PROVIDERS_CONFIG: /app/config/providers.yaml
       # ---- 每日预生成 ----
-      # 每日预生成题数上限（热榜取前 N 题）
+      # 启动补生成 / 每日预生成题数上限（0 关闭自动预生成）
       PREGENERATE_TOP: ${PREGENERATE_TOP:-30}
       ANALYSIS_RETRY_COOLDOWN_SEC: ${ANALYSIS_RETRY_COOLDOWN_SEC:-60}
       ANALYSIS_JOB_TIMEOUT_SEC: ${ANALYSIS_JOB_TIMEOUT_SEC:-180}

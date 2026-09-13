@@ -143,7 +143,7 @@ pnpm build      # 全 workspace 构建
 | `ZHIDUAN_DB_PATH` | 可选 | `./data/two-sides.db` | SQLite 单文件路径 |
 | `ZHIHU_ZHIDA_MODEL` | 可选 | `zhida-thinking-1p5` | 直答模型档位 |
 | `PROVIDERS_CONFIG` | 可选 | `config/providers.yaml` | 服务商与 Agent 绑定配置路径 |
-| `PREGENERATE_TOP` | 可选 | `30` | 每日预生成题数上限（热榜取前 N 题） |
+| `PREGENERATE_TOP` | 可选 | `30` | 启动补生成与每日预生成题数上限；`0` 关闭自动预生成 |
 | `ANALYSIS_RETRY_COOLDOWN_SEC` | 可选 | `60` | `failed` 后再试的冷却窗口，防连点打穿额度 |
 | `ANALYSIS_JOB_TIMEOUT_SEC` | 可选 | `180` | 单 job 总时限，超时置 `timeout` |
 | `LLM_RPM_LIMIT` | 可选 | `1000` | 全局令牌桶；提取/取向默认并发提高后，仍以此限制总请求速率，可按服务商承载调低 |
@@ -205,7 +205,8 @@ docker compose up -d
 
 - `web` 监听 `127.0.0.1:8080`，Caddy 托管静态产物并反代 `/api/*` → `server:3000`
 - `server` 不对外暴露端口；SQLite 落在具名卷 `two-sides-server-data`
-- **每日预生成（cron）为进程内定时器**（每日 `Asia/Shanghai 00:30`，取热榜前 `PREGENERATE_TOP` 题），无外部 crontab、无内部触发端点；端点未实现前快照由懒生成路径（`GET /analysis` 未命中即隐式触发）自然填充，落地后同样秒开
+- **启动自动补生成**：以 `Asia/Shanghai` 判断当天，优先读取 SQLite 中的热榜候选；当天没有候选时抓取前 `PREGENERATE_TOP` 题并生成分析，已有候选则只补未完成题目。后台运行，不阻塞接口启动；已 ready 的快照复用，failed 不自动重跑。榜单和分析写入 `/app/data/two-sides.db`，保存在 `two-sides-server-data` 卷中，重启后继续复用。
+- **每日预生成**仍在进程内于 `Asia/Shanghai 00:30` 触发，与启动检查共用批次并复用当天缓存。需 `ZHIHU_LIVE=1` 且已配置凭证；`PREGENERATE_TOP=0` 关闭自动预生成。外部接口失败会记录日志，HTTP 服务继续运行。
 - **TLS / 对外反代不归 compose 管**：自行部署反代指向 `127.0.0.1:8080` 终止 HTTPS
 - 秒开验收标准：热榜页与预置题 **TTFB < 200ms、渲染路径无任何实时生成调用**
 - ⚠️ **上线检查**：`.env` 里 `ZHIHU_LIVE=1` 与 `PIPELINE_MODE=llm` 必须成对设置，并确认知乎与 LLM 凭证已配置；缺失时应看到明确错误，而不是假数据

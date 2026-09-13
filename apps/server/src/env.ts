@@ -130,7 +130,7 @@ export const env = {
   /** 启动时是否重放上一轮未完成的 job */
   RECOVER_ON_BOOT: bool('RECOVER_ON_BOOT', true),
 
-  /** 每日 00:30（Asia/Shanghai）预生成热榜题数（docs/04） */
+  /** 启动补生成与每日 00:30（Asia/Shanghai）预生成题数；0 关闭自动预生成 */
   PREGENERATE_TOP: num('PREGENERATE_TOP', 30),
 
   INTERNAL_TOKEN: str('INTERNAL_TOKEN', ''),

@@ -17,7 +17,7 @@ import { getDb } from './db'
 import { env, zhihuSecretStatus } from './env'
 import { log } from './log'
 import { recoverOnBoot } from './jobs'
-import { startPregenerateCron } from './pregenerate'
+import { pregenerateOnBoot, startPregenerateCron } from './pregenerate'
 import { registryDiagnostics } from './llm/provider'
 import { failResp } from './http'
 import { analysisRoutes } from './routes/analysis'
@@ -88,6 +88,7 @@ log.info('boot.providers', registryDiagnostics())
 getDb() // 提前建库建表，避免首个请求承担迁移耗时
 recoverOnBoot()
 startPregenerateCron() // 每日 00:30（Asia/Shanghai）热榜预生成，进程内 timer
+void pregenerateOnBoot() // 当日缺失则后台补生成并落 SQLite，不阻塞 HTTP 启动
 
 log.info('boot.ready', { date: todayKey(), port: env.PORT })
 

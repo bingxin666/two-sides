@@ -158,6 +158,9 @@ function buildStmts(db: Sql) {
        ON CONFLICT (date, qid) DO UPDATE SET
          title = excluded.title, url = excluded.url, fetched_at = excluded.fetched_at`,
     ),
+    listHotQuestions: db.query<HotQuestionRow, [string]>(
+      `SELECT date, qid, title, url, fetched_at FROM hot_questions WHERE date = ? ORDER BY rowid`,
+    ),
     listReadyHot: db.query<{ qid: string; title: string }, [string]>(
       `SELECT h.qid AS qid, h.title AS title
          FROM hot_questions h
@@ -356,6 +359,11 @@ export function upsertHotQuestions(date: string, items: HotQuestionRow[]): void 
     }
   })
   tx()
+}
+
+/** 当日已抓取的完整候选集，包含尚未分析或失败的题，供启动补生成复用。 */
+export function listHotQuestions(date: string): HotQuestionRow[] {
+  return s().listHotQuestions.all(date)
 }
 
 /** 只返回当日已 ready 的题（docs/03 §5.3） */

@@ -36,6 +36,9 @@ jobs:
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
+      - name: Verify startup hot-list generation
+        run: pnpm -F @two-sides/server pregenerate:test
+
       - name: Build application artifacts
         run: pnpm build
 

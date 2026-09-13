@@ -4,10 +4,11 @@
  * 目标：让 GET /hot 在当天第一次被访问前就有真实数据 —— 00:30（Asia/Shanghai）
  * 拉热榜前 N 题逐题跑管线，用户白天点开热榜卡即 ready，不用现场等 1–2 分钟。
  *
- * 三件套：
+ * 入口：
  *   1. pregenerate(topN)          —— 批次函数（本模块），cron 与手动脚本共用
  *   2. pregenerate:run --top N    —— 手动脚本（src/pregenerate-run.ts，双闸：--live 才真跑）
  *   3. startPregenerateCron()     —— 进程内 Bun timer 对齐每日 00:30，触发后 re-arm 次日
+ *   4. pregenerateOnBoot()        —— 后台补齐当日热榜，优先复用 SQLite 中的候选
  *
  * 纪律（docs/01 §4.1 / team-lead 拍板）：
  *   - 全程走 ZHIHU_LIVE 闸：hotList 自带闸，闸关时 cron tick 只记日志不硬跑
@@ -21,9 +22,9 @@
 import { env } from './env'
 import { log, errFields } from './log'
 import { hotList, isLive } from './zhihu/client'
-import { cacheQuestionTitle, getAnalysis, upsertHotQuestions } from './repo'
-import { startRunnerAwait, tryAcquire } from './jobs'
-import { nowIso, todayKey } from './time'
+import { cacheQuestionTitle, getAnalysis, getJob, listHotQuestions, upsertHotQuestions } from './repo'
+import { isRunningHere, STALE_GRACE_MS, startRunnerAwait, tryAcquire } from './jobs'
+import { nowIso, parseIso, todayKey } from './time'
 
 /** 批内并发度：4；搜索与 LLM 各自仍受客户端限流/令牌桶约束 */
 const PREGENERATE_CONCURRENCY = env.PREGENERATE_CONCURRENCY
@@ -103,16 +104,28 @@ export async function runPregenerateBatch(
 }
 
 /**
- * 预生成一批热榜题：hot_list(1 次额度) → 前 N 题 → 逐题跑现有 job 机制。
+ * 预生成一批热榜题：优先按选项复用本地候选，否则 hot_list(1 次额度) 抓取前 N 题。
  * titleHint 直接给（标题来自 hot_list 本身，零额外解析）；
  * hot_questions 与 question_titles 同步落库（/hot 与后续懒生成都有着落）。
  */
-export async function pregenerate(topN: number = env.PREGENERATE_TOP): Promise<PregenerateReport> {
+async function generateForDate(date: string, topN: number, reuseStored: boolean): Promise<PregenerateReport> {
   if (!isLive()) {
     throw new Error('pregenerate requires ZHIHU_LIVE=1（预生成全程走 live 闸，闸关时拒绝空转）')
   }
-  const date = todayKey()
+  if (topN <= 0) return runPregenerateBatch(date, [])
   log.info('pregenerate.start', { date, topN })
+
+  if (reuseStored) {
+    const stored = listHotQuestions(date).slice(0, topN)
+    if (stored.length > 0) {
+      // 只保存了榜单但分析中途停止时，也能从本地列表续跑，不重抓热榜。
+      log.info('pregenerate.cache.hit', { date, count: stored.length })
+      for (const it of stored) cacheQuestionTitle(it.qid, it.title, 'hot')
+      const report = await runPregenerateBatch(date, stored)
+      report.topN = topN
+      return report
+    }
+  }
 
   const questions = await hotList(topN)
   const items = questions.slice(0, topN).map((q) => ({ qid: q.qid, title: cleanHotTitle(q.title) }))
@@ -129,6 +142,65 @@ export async function pregenerate(topN: number = env.PREGENERATE_TOP): Promise<P
   const report = await runPregenerateBatch(date, items)
   report.topN = topN
   return report
+}
+
+/** 启动、cron 和本进程手动调用共用批次；异常后释放，后续调用仍可重试。 */
+const activeBatches = new Map<string, Promise<PregenerateReport>>()
+
+export function pregenerate(
+  topN: number = env.PREGENERATE_TOP,
+  options: { reuseStored?: boolean } = {},
+): Promise<PregenerateReport> {
+  const date = todayKey()
+  const active = activeBatches.get(date)
+  if (active) return active
+  const batch = generateForDate(date, topN, options.reuseStored ?? false)
+    .finally(() => { activeBatches.delete(date) })
+  activeBatches.set(date, batch)
+  return batch
+}
+
+/**
+ * 刚重启时旧进程的 generating 锁还可能未过期。只在其到期后复查一次，
+ * 仍走 tryAcquire，其他进程仍在更新的任务不抢占；failed 不自动重跑。
+ */
+function recheckInterruptedOnce(date: string): void {
+  let delay = 0
+  for (const item of listHotQuestions(date).slice(0, env.PREGENERATE_TOP)) {
+    const job = getJob(date, item.qid)
+    if (!job || (job.status !== 'pending' && job.status !== 'generating') || isRunningHere(date, item.qid)) continue
+    const updated = parseIso(job.updated_at)
+    const remaining = Number.isFinite(updated)
+      ? updated + env.JOB_TIMEOUT_SEC * 1000 + STALE_GRACE_MS - Date.now()
+      : 0
+    delay = Math.max(delay, remaining + 1, 1)
+  }
+  if (!delay) return
+  log.info('pregenerate.boot.recheckScheduled', { date, delayMs: delay })
+  setTimeout(() => {
+    // 不递归重试，也不因热榜抓取失败发起新的请求。
+    void Promise.resolve().then(() => {
+      if (todayKey() !== date || !isLive()) return
+      return runPregenerateBatch(date, listHotQuestions(date).slice(0, env.PREGENERATE_TOP))
+    })
+      .catch((e) => log.warn('pregenerate.boot.recheckFailed', { date, ...errFields(e) }))
+  }, delay).unref()
+}
+
+/** index 后台调用；外部接口失败不影响 HTTP 启动和当晚 cron。 */
+export async function pregenerateOnBoot(): Promise<void> {
+  const date = todayKey()
+  if (!isLive() || env.PREGENERATE_TOP <= 0) {
+    log.info('pregenerate.boot.skipped', { date, reason: 'live gate closed or PREGENERATE_TOP=0' })
+    return
+  }
+  try {
+    const report = await pregenerate(env.PREGENERATE_TOP, { reuseStored: true })
+    log.info('pregenerate.boot.done', { ...report })
+    if (report.busyElsewhere > 0) recheckInterruptedOnce(report.date)
+  } catch (e) {
+    log.warn('pregenerate.boot.failed', { date, ...errFields(e) })
+  }
 }
 
 /* ------------------------------ 进程内 cron ------------------------------ */
@@ -154,13 +226,13 @@ async function cronTick(): Promise<void> {
     return
   }
   cronLastRunDate = date
-  if (!isLive()) {
+  if (!isLive() || env.PREGENERATE_TOP <= 0) {
     // 闸关着就别空转：记一笔走人，下次 00:30 再试（手动脚本不受此限，可显式 --live）
-    log.info('pregenerate.cron.skipped', { date, reason: 'zhihu live gate closed' })
+    log.info('pregenerate.cron.skipped', { date, reason: 'live gate closed or PREGENERATE_TOP=0' })
     return
   }
   try {
-    const r = await pregenerate(env.PREGENERATE_TOP)
+    const r = await pregenerate(env.PREGENERATE_TOP, { reuseStored: true })
     log.info('pregenerate.cron.done', { ...r, date: todayKey() })
   } catch (e) {
     log.warn('pregenerate.cron.failed', { date: todayKey(), ...errFields(e) })
