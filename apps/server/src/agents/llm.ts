@@ -301,6 +301,7 @@ export async function searchDedup(variants: string[], ctx: PipelineContext): Pro
   // 不再人为插入 300ms 间隔；知乎限流由请求层/全局令牌桶负责。
   let next = 0
   let lastError: unknown
+  let successCount = 0
   const worker = async (): Promise<void> => {
     while (true) {
       const i = next++
@@ -322,6 +323,7 @@ export async function searchDedup(variants: string[], ctx: PipelineContext): Pro
           if (!key || seen.has(key)) continue
           seen.set(key, it)
         }
+        successCount++
         ctx.note(`search.variant.${i}.ok`, { queryLen: v.length, got: items.length })
       } catch (e) {
         // 单变体失败不阻塞其余变体（任一变体成功即可继续）
@@ -333,7 +335,7 @@ export async function searchDedup(variants: string[], ctx: PipelineContext): Pro
   }
   const workerCount = Math.min(2, variants.length)
   await Promise.all(Array.from({ length: workerCount }, () => worker()))
-  if (seen.size === 0 && lastError !== undefined) throw lastError
+  if (seen.size === 0 && successCount === 0 && lastError !== undefined) throw lastError
   return [...seen.values()]
 }
 
@@ -691,7 +693,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
   }
 
   return {
-    /* ---------------- 内容获取：3 Query 变体 + 去重合并 ---------------- */
+    /* ---------------- 内容获取：Query 变体并发 + 去重合并 ---------------- */
     async fetchAnswers(qid, ctx) {
       if (!isLive()) {
         throw new PipelineError(
