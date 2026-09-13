@@ -29,7 +29,7 @@ import { nowIso, parseIso, todayKey } from './time'
 /** 批内并发度（默认 4）；搜索与 LLM 各自仍受客户端限流/令牌桶约束 */
 const PREGENERATE_CONCURRENCY = env.PREGENERATE_CONCURRENCY
 
-/** 剥掉站点后缀（与 routes/search.ts 同口径；实测 hot_list 标题一般已无后缀，防御性保留） */
+/** 剥掉站点后缀（实测 hot_list 标题一般已无后缀，防御性保留） */
 function cleanHotTitle(raw: string): string {
   return raw.replace(/\s*[-–—]\s*知乎\s*$/u, '').trim()
 }

@@ -191,6 +191,56 @@ export const OppositeResp = z.object({
   theirSlot: Slot,
 })
 
+/* ---------------- 增强层 · 登录态与「与你有关」 ---------------- */
+
+/**
+ * GET /auth/zhihu/status —— 登录态查询（不产生任何知乎调用）。
+ * appId / redirectUri 只用于前端诊断展示；二者本就是公开值，
+ * **App Key 与用户 token 永不出现在任何响应里**。
+ */
+export const ZhihuAuthStatusResp = z.object({
+  /** 服务端 OAuth 凭证是否齐备（缺则登录按钮不可用，点了也是 503） */
+  configured: z.boolean(),
+  callbackConfigured: z.boolean(),
+  appId: z.string().nullable(),
+  redirectUri: z.string().nullable(),
+  authorized: z.boolean(),
+  /** 会话到期时间（毫秒时间戳）；未登录为 null */
+  expiresAt: z.number().nullable(),
+})
+
+/**
+ * 「这道题与你有关」的判定依据。**只有 id 级精确匹配，没有模糊匹配**：
+ * - question_favorited：你收藏过的**问题**（收藏条目 ContentType=question）
+ * - answer_favorited：你收藏过的**回答**，且该回答被写进了这道题的光谱
+ *
+ * 明确不存在「你关注了这个问题」——开放平台没有该接口（`user_followees`
+ * 是关注的用户，不是关注的问题）。详见 docs/03 §8.2。
+ */
+export const RelatedReason = z.enum(['question_favorited', 'answer_favorited'])
+
+export const RelatedItem = z.object({
+  qid: z.string(),
+  /** 至少一条；无标记的题不出现在 items 里（缺省即「无从判断」，不构成断言） */
+  reasons: z.array(RelatedReason).min(1),
+})
+
+/**
+ * GET /me/related —— 当日热榜题里「与你有关」的那些。
+ *
+ * 未登录返回 `authorized: false` + 空 items，**用 200 而不是 403**：
+ * 前端必须能区分「没登录」（正常，安静降级）与「出错了」（要提示/重试），
+ * 403 会把两者混成一个分支。这是对 `/me/opposite` 那套 403 语义的有意偏离。
+ *
+ * `degraded: true` = 本次没完整取到用户收藏（接口失败/额度），
+ * **marks 可能不完整，但不代表「无关」** —— 前端不要据此渲染任何否定文案。
+ */
+export const RelatedResp = z.object({
+  authorized: z.boolean(),
+  degraded: z.boolean().optional(),
+  items: z.array(RelatedItem),
+})
+
 /* ============================================================
  * 3. 统一信封
  * ============================================================ */
@@ -207,32 +257,29 @@ export const ErrEnvelope = z.object({
 })
 
 /* ============================================================
- * 4.5 搜索候选（D1 增补 · 冷题入口）
+ * 4.6 产品入口（2026-09-13 第七次契约收敛）
  * ============================================================ */
 
 /**
- * GET /search?q=<问题文本> 的候选题。
- * 产品决策（2026-09-12 用户拍板）：**产品输入只有「问题文字」，不做任何 qid 反查**。
- * 依据（全部实测）：知乎搜索对纯 qid 搜不出结果；og:title 被 zse-ck 风控挑战拦截
- * （无浏览器执行环境拿不到）；global_search 不索引 qid。
- * 服务端从 zhihu_search 结果的 Url 中提取 /question/<qid>/，按问题维度去重，
- * 返回 ≤8 条；命中结果顺带写入 question_titles 永久缓存（缓存预热）。
- * qid 仅作内部资源键（缓存键/路由参数），不对用户暴露，也**永不作为标题解析的输入**。
+ * **产品唯一入口是热榜，没有用户输入。**
+ *
+ * 2026-09-13 用户拍板：废除「输入问题文字 → 搜索候选题 → 懒生成」这条链路。
+ * 理由：知乎搜索对任意自由文本的召回不稳定（纯 qid 搜不出、og:title 被风控拦截、
+ * global_search 不索引 qid），要靠「薄样本救援合并 + URL 强校验」兜底，复杂度高
+ * 而收益不确定；而热榜题每天固定 ≤30 道、可提前预生成，体验与质量都更可控。
+ *
+ * 因此：GET /search 端点、SearchResp / SearchCandidate 契约、前端输入框全部移除。
+ * 「题名 → qid」的解析只剩一处 —— 热榜自带的 {title, url}（question_titles 永久缓存），
+ * 冷题（不带 title 且缓存未命中）直接 failed，不做任何反查。
  */
-export const SearchCandidate = z.object({
-  qid: z.string(),
-  title: z.string(),
-})
-export const SearchResp = z.object({
-  items: z.array(SearchCandidate).max(8),
-})
-export const SearchEnvelope = okEnvelope(SearchResp)
 
 export const HotEnvelope = okEnvelope(HotResp)
 export const AnalysisEnvelope = okEnvelope(AnalysisResp)
 export const ProgressEnvelope = okEnvelope(ProgressResp)
 export const HealthEnvelope = okEnvelope(HealthResp)
 export const OppositeEnvelope = okEnvelope(OppositeResp)
+export const ZhihuAuthStatusEnvelope = okEnvelope(ZhihuAuthStatusResp)
+export const RelatedEnvelope = okEnvelope(RelatedResp)
 
 /* ============================================================
  * 4. 失败文案（前端默认兜底；服务端 error.retryable 优先）
@@ -266,7 +313,8 @@ export const API_V1 = '/api/v1'
 
 export const ENDPOINTS = {
   /**
-   * title 可选：冷题懒生成的标题提示（来自 /search 候选或上游跳转）。
+   * title 可选：题名提示，仅用于运维/带外跳转（热榜预生成已把题名写进
+   * question_titles 永久缓存，正常路径无需携带）。
    * 服务端不完全信任它——抓到的回答 URL 必须含 /question/<qid>/，
    * 一条都没有就 failed，绝不产出答非所问的快照。
    * 无 title 且 question_titles 缓存未命中 → 直接 failed（产品决策：不做任何 qid 反查）。
@@ -284,7 +332,6 @@ export const ENDPOINTS = {
     const qs = params.toString()
     return `${API_V1}/questions/${qid}/analysis${qs ? `?${qs}` : ''}`
   },
-  search: (q: string) => `${API_V1}/search?q=${encodeURIComponent(q)}`,
   hot: `${API_V1}/hot`,
   health: `${API_V1}/health`,
   zhihuAuthorize: `${API_V1}/auth/zhihu/authorize`,
@@ -292,6 +339,16 @@ export const ENDPOINTS = {
   zhihuStatus: `${API_V1}/auth/zhihu/status`,
   zhihuLogout: `${API_V1}/auth/zhihu/logout`,
   meOpposite: (judgmentId: string) => `${API_V1}/me/opposite?judgmentId=${judgmentId}`,
+  /**
+   * 增强层 · 当日热榜题里「与你有关」的那些（收藏过的题 / 收藏过的回答）。
+   * qid 可选：带外直接打开某个问题页时，额外带上它一起判定。
+   */
+  meRelated: (qid?: string) => {
+    const params = new URLSearchParams()
+    if (qid) params.set('qid', qid)
+    const qs = params.toString()
+    return `${API_V1}/me/related${qs ? `?${qs}` : ''}`
+  },
 } as const
 
 /* ============================================================
@@ -362,5 +419,7 @@ export type AnalysisResp = z.infer<typeof AnalysisResp>
 export type HealthResp = z.infer<typeof HealthResp>
 export type OppositeResp = z.infer<typeof OppositeResp>
 export type QuotaResp = z.infer<typeof QuotaResp>
-export type SearchCandidate = z.infer<typeof SearchCandidate>
-export type SearchResp = z.infer<typeof SearchResp>
+export type ZhihuAuthStatusResp = z.infer<typeof ZhihuAuthStatusResp>
+export type RelatedReason = z.infer<typeof RelatedReason>
+export type RelatedItem = z.infer<typeof RelatedItem>
+export type RelatedResp = z.infer<typeof RelatedResp>

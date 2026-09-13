@@ -8,6 +8,7 @@ import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { useAnalysisStore } from '@/stores/analysis'
+import { useUserStore } from '@/stores/user'
 import VeilGlass from '@/components/veil/VeilGlass.vue'
 import PinRail from '@/components/question/PinRail.vue'
 import ExpandedPanel from '@/components/question/ExpandedPanel.vue'
@@ -17,12 +18,19 @@ import FailedCard from '@/components/status/FailedCard.vue'
 const route = useRoute()
 const router = useRouter()
 const store = useAnalysisStore()
+const user = useUserStore()
 const { phase, analysis, progress, error, selectedJudgmentId, summaryPolling } = storeToRefs(store)
 const veilPanX = ref(0)
 
 const qid = computed(() => String(route.params.qid ?? ''))
+
+/** 「与你有关」标记：与 N1 共用同一份用户态；未登录/未命中为空串 */
+const relatedLabel = computed(() => (user.isLoggedIn ? user.labelFor(qid.value) : ''))
 const jFromQuery = computed(() => (typeof route.query.j === 'string' ? route.query.j : null))
-/** 搜索候选带来的标题提示：冷题懒生成时给服务端当 title 提示（契约 ENDPOINTS.analysis） */
+/**
+ * 题名提示：正常路径由热榜预生成写入服务端 question_titles 缓存，前端无需携带；
+ * ?title= 只作带外/运维兜底（契约 ENDPOINTS.analysis）。
+ */
 const titleFromQuery = computed(() => {
   const t = route.query.title
   return typeof t === 'string' && t.trim() ? t : undefined
@@ -32,7 +40,7 @@ const isGenerating = computed(() => phase.value === 'loading' || phase.value ===
 
 const title = computed(() => {
   if (analysis.value?.question) return analysis.value.question
-  // 生成期间搜索候选已带来标题：如实用它，不让用户看占位文案
+  // 生成期间若 URL 带了题名：如实用它，不让用户看占位文案
   if (isGenerating.value && titleFromQuery.value) return titleFromQuery.value
   if (phase.value === 'failed') return '这个问题今天没能生成'
   return '正在获取问题…'
@@ -107,6 +115,8 @@ function onRetry() {
 // 首屏加载；换题时重置再拉。title 提示随 query 透传给懒生成
 onMounted(() => {
   if (qid.value) void store.load(qid.value, titleFromQuery.value ? { title: titleFromQuery.value } : undefined)
+  // 增强层：先复用 N1 拉到的标记；带外 qid 不在当日热榜里时补一次判定
+  void user.ensureLoaded(qid.value || undefined)
 })
 
 // 离开页面即停本轮轮询（后端任务不中断，§6.3）
@@ -118,6 +128,7 @@ watch(qid, (id, prev) => {
   if (!id || id === prev) return
   store.reset()
   void store.load(id, titleFromQuery.value ? { title: titleFromQuery.value } : undefined)
+  void user.ensureLoaded(id)
 })
 
 // ?j= 恢复选中判断
@@ -150,6 +161,10 @@ watch(
         <span v-if="analysis.classification.unmatchedAnswerCount > 0">{{ analysis.classification.unmatchedAnswerCount }}条未涉及这些议题</span>
         <span v-if="analysis.classification.unmatchedAnswerCount > 0 && analysis.classification.failedAnswerCount > 0"> · </span>
         <span v-if="analysis.classification.failedAnswerCount > 0">{{ analysis.classification.failedAnswerCount }}条暂未完成归类</span>
+      </p>
+      <!-- 增强层：只有 id 级精确命中（收藏过这道题 / 收藏过这题里的回答）才出现 -->
+      <p v-if="relatedLabel" class="qhead__related">
+        <span class="qhead__related-dot" aria-hidden="true" />{{ relatedLabel }}
       </p>
       <p v-if="summaryPolling" class="qhead__meta" role="status">刘看山解读正在生成</p>
     </header>
@@ -243,6 +258,29 @@ watch(
 /* 合并声明：与 meta 同级弱化，不抢「基于 N 条回答」主信息；hover tooltip 列出来源 */
 .qhead__merged {
   color: var(--muted);
+}
+
+/* 「与你有关」标记：与 N1 卡片同一套视觉语言（小圆点 + 描边胶囊） */
+.qhead__related {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+  height: 22px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  line-height: 22px;
+  color: var(--ink-mid);
+}
+
+.qhead__related-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-soft);
 }
 
 .qbody {

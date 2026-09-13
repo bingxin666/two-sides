@@ -130,13 +130,15 @@ async function callPass<T>(
       messages: [{ role: 'system', content: system }, { role: 'user', content: JSON.stringify(payload) }],
       jsonMode: true,
       temperature: 0.1,
-      timeoutMs: agent === 'merge' ? 90_000 : 45_000,
+      // 2026-09-13：样本池从 ≤10 条放宽到 ≤40 条，主题发现要吃下整个池子，
+      // 单次调用预算与输出上限同步放宽（整题预算 600s，见 budget.ts）。
+      timeoutMs: agent === 'merge' ? 150_000 : 60_000,
       deadlineAt: ctx.deadlineAt,
       signal: ctx.signal,
       maxAttempts: 2,
-      // Topic discovery is intentionally compact; classification keeps a
+      // Topic discovery now reads a much larger pool; classification keeps a
       // larger budget for one answer's placements and reasons.
-      maxTokens: agent === 'merge' ? 1_200 : 3_000,
+      maxTokens: agent === 'merge' ? 2_400 : 3_000,
       context: { qid: ctx.qid, date: ctx.date, stage, unit: ctx.unit ?? (agent === 'merge' ? 'topics' : undefined) },
       validate,
     })

@@ -4,18 +4,19 @@ import {
   HealthResp,
   HotResp,
   ProgressResp,
-  SearchResp,
+  RelatedResp,
+  ZhihuAuthStatusResp,
   type Analysis as AnalysisT,
   type ErrorCode,
   type HealthResp as HealthRespT,
   type HotResp as HotRespT,
   type ProgressResp as ProgressRespT,
-  type SearchResp as SearchRespT,
+  type RelatedResp as RelatedRespT,
   type Stage,
+  type ZhihuAuthStatusResp as ZhihuAuthStatusT,
 } from '@two-sides/contract'
 
 import hotFixture from './fixtures/hot.json'
-import searchFixture from './fixtures/search.json'
 import kaoyanFixture from './fixtures/analysis-kaoyan.json'
 import houseFixture from './fixtures/analysis-house.json'
 import timelineFixture from './fixtures/progress-timeline.json'
@@ -26,6 +27,8 @@ import timelineFixture from './fixtures/progress-timeline.json'
  * 目标：不开后端也能跑通 N1/N2/N3/T1/失败态五条路径，且数据与契约零漂移
  * —— 所有 fixture 在载入时就用 contract 的 zod schema 校验一遍。
  *
+ * 产品入口只有热榜（2026-09-13 收敛，没有搜索端点）。
+ *
  * URL 开关（写在 query 上，方便 UI 单独验证某个分支）：
  *   ?mock=fail:quota_exhausted    → getAnalysis 返回一次失败态 202；点「重试」后恢复生成
  *   ?mock=sticky:quota_exhausted  → 一直失败（重试也失败），用来验证不可重试卡片
@@ -35,7 +38,8 @@ import timelineFixture from './fixtures/progress-timeline.json'
  */
 
 const HOT: HotRespT = HotResp.parse(hotFixture)
-const SEARCH: SearchRespT = SearchResp.parse(searchFixture)
+/** 离线预览用的假 app_id（真实 app_id 本就公开，但离线不该出现真实值） */
+const IS_MOCK_APP_ID = 'mock-app-id'
 const ANALYSES: AnalysisT[] = [Analysis.parse(kaoyanFixture), Analysis.parse(houseFixture)]
 const READY = new Map(ANALYSES.map((a) => [a.qid, a]))
 const TIMELINE: ProgressRespT[] = ProgressResp.array().parse(timelineFixture)
@@ -140,19 +144,6 @@ async function getHot(): Promise<HotRespT> {
   return HOT
 }
 
-/**
- * 文字搜题（唯一冷题入口）。按空白分词做标题包含匹配，无命中返回空数组
- * —— 离线也能验证搜索下拉的空态。
- */
-async function getSearch(q: string): Promise<SearchRespT> {
-  await delay(LATENCY_MS)
-  const query = q.trim()
-  if (!query) return SearchResp.parse({ items: [] })
-  const terms = query.split(/\s+/).filter((t) => t.length > 0)
-  const items = SEARCH.items.filter((c) => terms.some((t) => c.title.includes(t)))
-  return SearchResp.parse({ items })
-}
-
 async function getAnalysis(qid: string, title?: string): Promise<AnalysisT | ProgressRespT> {
   await delay(LATENCY_MS)
 
@@ -203,10 +194,50 @@ async function getHealth(): Promise<HealthRespT> {
   })
 }
 
+/* ---------------- 增强层 · 登录态与「与你有关」 ---------------- */
+
+/**
+ * 离线预览时的登录态。URL 开关 `?mock=authorized` 可切到「已登录」，
+ * 并让 getRelated 吐出两条示例标记（第一条热榜题用两种原因、第二条只用一种），
+ * 方便单独验证 N1/N2 的标记渲染。
+ */
+function mockAuthorized(): boolean {
+  return typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).get('mock') === 'authorized'
+}
+
+async function getZhihuStatus(): Promise<ZhihuAuthStatusT> {
+  await delay(120)
+  return ZhihuAuthStatusResp.parse({
+    configured: true,
+    callbackConfigured: true,
+    appId: IS_MOCK_APP_ID,
+    redirectUri: 'https://twosides.haori.ink/callback',
+    authorized: mockAuthorized(),
+    expiresAt: mockAuthorized() ? Date.now() + 3_600_000 : null,
+  })
+}
+
+/** 未登录 → authorized:false + 空；?mock=authorized → 两条示例标记 */
+async function getRelated(qid?: string): Promise<RelatedRespT> {
+  await delay(120)
+  if (!mockAuthorized()) return RelatedResp.parse({ authorized: false, items: [] })
+  const hot = HOT.items.map((i) => i.qid)
+  const items = [
+    { qid: hot[0], reasons: ['question_favorited', 'answer_favorited'] },
+    { qid: hot[1], reasons: ['answer_favorited'] },
+  ].filter((i) => Boolean(i.qid))
+  if (qid && !items.some((i) => i.qid === qid) && hot.includes(qid)) {
+    items.push({ qid, reasons: ['answer_favorited'] })
+  }
+  return RelatedResp.parse({ authorized: true, items })
+}
+
 export const mockApi = {
   getHot,
-  getSearch,
   getAnalysis,
   retryAnalysis,
   getHealth,
+  getZhihuStatus,
+  getRelated,
 }

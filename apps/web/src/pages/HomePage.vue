@@ -1,42 +1,90 @@
 <script setup lang="ts">
 /**
- * N1 首页（docs/02 §3.3 布局）：品牌行 h100 · 光幕 h600 · 输入行 h100 · 声明行 h100
+ * N1 首页（docs/02 §3.3 布局）：品牌行 h100 · 光幕 h600 · 声明行 h100
+ * 2026-09-13 产品收敛：**没有输入行**。唯一入口是热榜「光幕」——点任意一条进问题页。
  * 热榜数据来自 GET /hot（只含已 ready），空态/缺数据如实提示，不白屏
- * 品牌行右侧「知乎授权登录」跳转后端 OAuth；凭证未配置时后端返回明确错误。
+ *
+ * 增强层（可选，未配置/未登录时整层安静降级）：
+ *   品牌行右侧「知乎授权登录」→ 后端 OAuth；登录后热榜卡上出现「与你有关」标记
+ *   （你收藏过的题 / 你收藏过其中回答的题），N2 复用同一份标记。
  */
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import { useRoute, useRouter } from 'vue-router'
 import type { HotItem } from '@two-sides/contract'
-import { getHot } from '@/api'
+import { getHot, goZhihuAuthorize } from '@/api'
+import { useUserStore } from '@/stores/user'
 import VeilGlass from '@/components/veil/VeilGlass.vue'
 import HotGrid from '@/components/home/HotGrid.vue'
-import SearchBar from '@/components/home/SearchBar.vue'
 import HonestFooter from '@/components/home/HonestFooter.vue'
+
+const route = useRoute()
+const router = useRouter()
+const user = useUserStore()
 
 const items = ref<HotItem[]>([])
 const hotFailed = ref(false)
+const busy = ref(false)
 
 /** 配置缺失或网络失败时的提示气泡 */
 const loginHint = ref(false)
 let hintTimer: ReturnType<typeof setTimeout> | undefined
 
+/** qid → 标记文案（响应式：user.marks 变化即重算） */
+const marks = computed<Record<string, string>>(() => {
+  const out: Record<string, string> = {}
+  if (!user.isLoggedIn) return out
+  for (const qid of user.marks.keys()) {
+    const label = user.labelFor(qid)
+    if (label) out[qid] = label
+  }
+  return out
+})
+
+function showHint(text = '当前为离线预览，OAuth 登录需使用 live 后端') {
+  loginHint.value = true
+  if (hintTimer) clearTimeout(hintTimer)
+  hintTimer = setTimeout(() => { loginHint.value = false; hintTimer = undefined }, 2600)
+}
+
 function onLogin() {
   if (import.meta.env.VITE_API_MODE === 'mock') {
-    loginHint.value = true
-    if (hintTimer) clearTimeout(hintTimer)
-    hintTimer = setTimeout(() => { loginHint.value = false; hintTimer = undefined }, 2600)
+    // ?mock=authorized 可离线预览「已登录 + 有标记」的样子
+    showHint('离线预览：加 ?mock=authorized 可模拟已登录')
     return
   }
-  window.location.assign('/api/v1/auth/zhihu/authorize')
+  goZhihuAuthorize()
+}
+
+async function onLogout() {
+  if (busy.value) return
+  busy.value = true
+  try {
+    await user.signOut()
+  } finally {
+    busy.value = false
+  }
 }
 
 onMounted(async () => {
-  try {
-    const res = await getHot()
-    // 接口给 30 条，首页取 24
-    items.value = (res?.items ?? []).slice(0, 24)
-  } catch {
-    hotFailed.value = true
+  // OAuth 回跳：后端已种下会话 cookie，这里强制重拉标记并把 oauth 参数从地址栏摘掉
+  const oauth = route.query.oauth
+  if (oauth === 'success' || oauth === 'error') {
+    if (oauth === 'error') showHint('知乎授权未完成，可重试')
+    const query = { ...route.query }
+    delete query.oauth
+    void router.replace({ path: route.path, query })
   }
+
+  const tasks: Promise<unknown>[] = []
+  if (oauth === 'success') tasks.push(user.reloadAfterOauth())
+  else tasks.push(user.ensureLoaded())
+
+  tasks.push(
+    getHot()
+      .then((res) => { items.value = (res?.items ?? []).slice(0, 24) })
+      .catch(() => { hotFailed.value = true }),
+  )
+  await Promise.all(tasks)
 })
 
 onBeforeUnmount(() => {
@@ -53,22 +101,23 @@ onBeforeUnmount(() => {
         <p class="home__tagline">一道判断的光谱</p>
       </div>
       <div class="home__login">
-        <button type="button" class="home__login-btn" @click="onLogin">知乎授权登录</button>
-        <p v-if="loginHint" class="home__login-hint" role="status">
-          当前为离线预览，OAuth 登录需使用 live 后端
-        </p>
+        <template v-if="user.isLoggedIn">
+          <span class="home__login-state" role="status">
+            <span class="home__login-dot" aria-hidden="true" />
+            已登录知乎
+          </span>
+          <button type="button" class="home__login-btn" :disabled="busy" @click="onLogout">退出</button>
+        </template>
+        <button v-else type="button" class="home__login-btn" @click="onLogin">知乎授权登录</button>
+        <p v-if="loginHint" class="home__login-hint" role="status">{{ loginHint }}</p>
       </div>
     </header>
 
     <div class="home__veil">
       <VeilGlass :height="600">
-        <HotGrid :items="items" />
+        <HotGrid :items="items" :marks="marks" />
       </VeilGlass>
-      <p v-if="hotFailed" class="home__hot-error">热榜暂时取不到，可直接在下方粘贴问题链接</p>
-    </div>
-
-    <div class="home__search">
-      <SearchBar />
+      <p v-if="hotFailed" class="home__hot-error">热榜暂时取不到，请稍后再试</p>
     </div>
 
     <div class="home__foot">
@@ -116,7 +165,27 @@ onBeforeUnmount(() => {
 /* LoginBtn（设计稿）：描边胶囊 高36 · 圆角18 · 内边距16 */
 .home__login {
   position: relative;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   flex: 0 0 auto;
+}
+
+/* 已登录态：小圆点 + 极简文字，与标记同一种视觉语言 */
+.home__login-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-sans);
+  font-size: 12px;
+  color: var(--muted);
+}
+
+.home__login-dot {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ink-soft);
 }
 
 .home__login-btn {
@@ -128,12 +197,17 @@ onBeforeUnmount(() => {
   font-weight: 500;
   font-size: 13px;
   color: var(--ink-mid);
-  transition: border-color .2s ease, color .2s ease;
+  transition: border-color .2s ease, color .2s ease, opacity .2s ease;
 }
 
-.home__login-btn:hover {
+.home__login-btn:hover:not(:disabled) {
   border-color: var(--ink-soft);
   color: var(--ink);
+}
+
+.home__login-btn:disabled {
+  opacity: .6;
+  cursor: wait;
 }
 
 .home__login-hint {
@@ -165,13 +239,6 @@ onBeforeUnmount(() => {
   color: var(--muted);
 }
 
-.home__search {
-  display: flex;
-  align-items: center;
-  height: 100px;
-  padding: 0 var(--page-pad);
-}
-
 .home__foot {
   display: flex;
   align-items: center;
@@ -181,7 +248,6 @@ onBeforeUnmount(() => {
 
 @media (max-width: 1024px) {
   .home__brand,
-  .home__search,
   .home__foot {
     padding: 0 24px;
   }

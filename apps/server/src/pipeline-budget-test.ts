@@ -20,7 +20,7 @@ Object.assign(process.env, {
   ZHIDUAN_DB_PATH: resolve(testDir, 'job-test.db'),
   PIPELINE_MODE: 'fake',
   PIPELINE_FAKE_DURATION_MS: '5',
-  ANALYSIS_JOB_TIMEOUT_SEC: '180',
+  ANALYSIS_JOB_TIMEOUT_SEC: '600',
   PIPELINE_EXTRACT_CONCURRENCY: '1',
   PIPELINE_ORIENT_CONCURRENCY: '1',
   RECOVER_ON_BOOT: 'false',
@@ -78,11 +78,13 @@ async function main(): Promise<void> {
   const { runPipeline, summaryDegradation } = await import('./pipeline')
   const { createFakeAgents } = await import('./agents/fake')
   const { PipelineError } = await import('./agents/types')
-  const { runWithBudget, PHASE_BUDGETS } = await import('./budget')
+  const { runWithBudget, PHASE_BUDGETS, BUDGET_REFERENCE_MS } = await import('./budget')
   const { Analysis, checkCountingRules } = await import('@two-sides/contract')
   let passed = 0
 
-  function context(durationMs = 180_000) {
+  // 虚拟整题预算 = 预算标定基准（与 ANALYSIS_JOB_TIMEOUT_SEC 默认值一致）。
+  // 用常量而非字面量，改标定口径时这里自动跟上。
+  function context(durationMs = BUDGET_REFERENCE_MS) {
     const controller = new AbortController()
     const notes: Array<{ event: string; fields?: Record<string, unknown> }> = []
     const progress: Array<Partial<PipelineProgress>> = []

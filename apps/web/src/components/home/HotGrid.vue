@@ -12,9 +12,17 @@ import { useRouter } from 'vue-router'
 import type { HotItem } from '@two-sides/contract'
 import HotCard from './HotCard.vue'
 
-const props = withDefaults(defineProps<{ items?: HotItem[] }>(), { items: () => [] })
+const props = withDefaults(defineProps<{ items?: HotItem[]; marks?: Record<string, string> }>(), {
+  items: () => [],
+  marks: () => ({}),
+})
 
 const router = useRouter()
+
+/** qid → 「与你有关」标记文案；未登录 / 未命中时为空串 */
+function markOf(qid: string): string {
+  return props.marks[qid] ?? ''
+}
 
 /** 弹幕道 y（相对光幕顶部；设计稿页面坐标 146/258/370，光幕自 y=100 起） */
 const LANE_TOP = [46, 158, 270]
@@ -90,13 +98,14 @@ onBeforeUnmount(() => {
       >
         <div :ref="(el) => setTrack(el, i)" class="lane__track" :style="laneStyle(i)">
           <div class="lane__group">
-            <HotCard v-for="it in lane" :key="it.qid" :item="it" @open="open" />
+            <HotCard v-for="it in lane" :key="it.qid" :item="it" :mark="markOf(it.qid)" @open="open" />
           </div>
           <div class="lane__group" aria-hidden="true">
             <HotCard
               v-for="it in lane"
               :key="`ghost-${it.qid}`"
               :item="it"
+              :mark="markOf(it.qid)"
               tabindex="-1"
               @open="open"
             />
@@ -115,7 +124,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </template>
-    <p v-else class="hot-grid__empty">今日热榜尚未生成，可从下方直接粘贴知乎问题链接</p>
+    <p v-else class="hot-grid__empty">今日热榜尚未生成，稍后再来</p>
   </div>
 </template>
 

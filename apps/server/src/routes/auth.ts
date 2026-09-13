@@ -12,6 +12,7 @@ import { getCookie, setCookie } from 'hono/cookie'
 import { env } from '../env'
 import { errFields, log } from '../log'
 import { failResp, okData } from '../http'
+import { forgetSignals } from '../user-signals'
 
 const SESSION_COOKIE = 'two_sides_zhihu_session'
 const STATE_COOKIE = 'two_sides_zhihu_state'
@@ -34,11 +35,28 @@ function randomOpaque(): string {
 function prune(): void {
   const now = Date.now()
   for (const [id, session] of sessions) {
-    if (session.expiresAt <= now) sessions.delete(id)
+    if (session.expiresAt <= now) {
+      sessions.delete(id)
+      forgetSignals(id) // 会话过期 → 用户信号缓存一并释放，别留着占内存
+    }
   }
   for (const [state, createdAt] of pendingStates) {
     if (createdAt + STATE_TTL_MS <= now) pendingStates.delete(state)
   }
+}
+
+/**
+ * 取当前请求所属会话的 OAuth token（增强层其他功能共用）。
+ * 未登录 / 会话过期返回 null —— 调用方一律降级处理，不报错。
+ * 返回值只在服务端内存之间传递，绝不进日志、响应或数据库。
+ */
+export function sessionToken(c: Context): { sessionId: string; accessToken: string } | null {
+  prune()
+  const sessionId = getCookie(c, SESSION_COOKIE)
+  if (!sessionId) return null
+  const session = sessions.get(sessionId)
+  if (!session || session.expiresAt <= Date.now()) return null
+  return { sessionId, accessToken: session.accessToken }
 }
 
 function callbackRedirect(c: Context, ok: boolean): Response {
@@ -156,7 +174,10 @@ authRoutes.get('/auth/zhihu/callback', handleZhihuCallback)
 
 authRoutes.post('/auth/zhihu/logout', (c) => {
   const sessionId = getCookie(c, SESSION_COOKIE)
-  if (sessionId) sessions.delete(sessionId)
+  if (sessionId) {
+    sessions.delete(sessionId)
+    forgetSignals(sessionId)
+  }
   setCookie(c, SESSION_COOKIE, '', {
     httpOnly: true,
     secure: true,

@@ -107,8 +107,14 @@ export const env = {
 
   /** failed 后再试的冷却窗口（秒），防连点打穿额度 */
   RETRY_COOLDOWN_SEC: num('ANALYSIS_RETRY_COOLDOWN_SEC', 60),
-  /** 单 job 总时限（秒），超时置 timeout */
-  JOB_TIMEOUT_SEC: num('ANALYSIS_JOB_TIMEOUT_SEC', 180),
+  /**
+   * 单 job 总时限（秒），超时置 timeout。
+   *
+   * 2026-09-13：产品入口收敛为热榜（无用户输入）后，单题不再受交互延迟约束 ——
+   * 所有可见题目都是 00:30 预生成的预置题，用户点开时已是 ready 快照。
+   * 因此把预算从 180s 放宽到 600s，让「更大的样本池 + 更完整的两轮分析」跑得下。
+   */
+  JOB_TIMEOUT_SEC: num('ANALYSIS_JOB_TIMEOUT_SEC', 600),
   /** 全局 LLM 令牌桶（req/min） */
   /** 全局 LLM 令牌桶上限；并发由各阶段信号量控制，令牌桶负责总吞吐 */
   LLM_RPM_LIMIT: num('LLM_RPM_LIMIT', 1000),
@@ -117,6 +123,13 @@ export const env = {
   /** 单题提取/取向并发；生产可按供应商承载调节 */
   PIPELINE_EXTRACT_CONCURRENCY: positiveNum('PIPELINE_EXTRACT_CONCURRENCY', 30),
   PIPELINE_ORIENT_CONCURRENCY: positiveNum('PIPELINE_ORIENT_CONCURRENCY', 100),
+  /**
+   * 单题检索路数上限（1–4）：原句 + LLM 扩写的相似问法。
+   * 2026-09-13：全量预生成允许更长单题耗时，把样本池从「单次搜索 ≤10 条」
+   * 提到「≤4 路去重 ≤40 条」，判断的光谱才有足够答主把分布铺开。
+   * 设 1 = 只用原句（退回旧行为，省 LLM 扩写调用与搜索额度）。
+   */
+  PIPELINE_QUERY_VARIANTS: Math.min(4, positiveNum('PIPELINE_QUERY_VARIANTS', 4)),
   /** 预生成跨题并发；搜索与 LLM 仍受各自限流约束 */
   PREGENERATE_CONCURRENCY: positiveNum('PREGENERATE_CONCURRENCY', 4),
 
@@ -131,6 +144,18 @@ export const env = {
   ZHIHU_OAUTH_APP_ID: str('ZHIHU_OAUTH_APP_ID', ''),
   ZHIHU_OAUTH_APP_KEY: str('ZHIHU_OAUTH_APP_KEY', ''),
   ZHIHU_OAUTH_REDIRECT_URI: str('ZHIHU_OAUTH_REDIRECT_URI', ''),
+
+  /**
+   * 增强层 · 用户收藏扫描（N1/N2 的「与你有关」标记）。
+   * 收藏夹按新→旧排序，只需要最近的若干条就能覆盖当日热榜，故默认只扫每个夹第 1 页。
+   * 每页 50 条；一次扫描 = 1（收藏夹列表）+ 夹数×页数 次 user_data 调用。
+   * user_data 日额度 10000，本功能单用户单次约 6 次，且带 TTL 缓存。
+   */
+  FAV_SCAN_LISTS: Math.min(20, positiveNum('ZHIHU_FAV_SCAN_LISTS', 5)),
+  FAV_SCAN_PAGES: Math.min(3, positiveNum('ZHIHU_FAV_SCAN_PAGES', 1)),
+  FAV_PAGE_SIZE: Math.min(50, positiveNum('ZHIHU_FAV_PAGE_SIZE', 50)),
+  /** 用户信号缓存 TTL（秒）：同一会话内不重复扫收藏 */
+  USER_SIGNAL_TTL_SEC: positiveNum('USER_SIGNAL_TTL_SEC', 600),
 
   /** 管线实现选择：llm 默认；fake 仅在显式 PIPELINE_MODE=fake 时启用 */
   PIPELINE_MODE: pipelineMode(),

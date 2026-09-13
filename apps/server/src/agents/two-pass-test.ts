@@ -49,7 +49,8 @@ try {
   const agents = createTwoPassAgents()
   const topics = await agents.discoverTopics!("测试题", answers, ctx)
   assert.deepEqual(topics.map((topic) => topic.id), ['j1', 'j2'])
-  assert.equal(calls[0]!.maxTokens, 1_200)
+  // 主题发现要一次吃下整个样本池（2026-09-13 起 ≤4 路检索去重、≤40 条回答）
+  assert.equal(calls[0]!.maxTokens, 2_400)
   assert.match(calls[0]!.system!, /8 个是硬上限/)
   assert.equal(calls[0]!.payload.answers.length, answers.length)
   assert.equal(calls[0]!.payload.answers[0].content, answers[0].content)

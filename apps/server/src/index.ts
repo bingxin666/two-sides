@@ -4,8 +4,11 @@
  * 挂载：
  *   /api/v1/health
  *   /api/v1/hot
- *   /api/v1/search
  *   /api/v1/questions/:qid/analysis   (GET 主端点 / POST 重试)
+ *   /api/v1/auth/zhihu/*              (增强层 · 登录)
+ *   /api/v1/me/related                (增强层 · 与你有关)
+ *
+ * 产品入口只有热榜（2026-09-13 收敛）：/api/v1/search 已随「无用户输入」一并移除。
  *
  * 启动自检只打印「是否配置 + 长度 + SHA-256 短前缀」，不打印任何凭证本体。
  */
@@ -23,8 +26,8 @@ import { failResp } from './http'
 import { analysisRoutes } from './routes/analysis'
 import { healthRoutes } from './routes/health'
 import { hotRoutes } from './routes/hot'
-import { searchRoutes } from './routes/search'
 import { authRoutes, publicCallbackRoutes } from './routes/auth'
+import { meRoutes } from './routes/me'
 import { isLive } from './zhihu/client'
 import { todayKey } from './time'
 
@@ -32,7 +35,7 @@ const app = new Hono()
 
 app.use('*', cors())
 
-// 请求日志：只记方法与路径，不记 query（可能含用户搜索词）
+// 请求日志：只记方法与路径，不记 query
 app.use('*', async (c, next) => {
   const started = performance.now()
   await next()
@@ -46,9 +49,9 @@ app.use('*', async (c, next) => {
 
 app.route(API_V1, healthRoutes)
 app.route(API_V1, hotRoutes)
-app.route(API_V1, searchRoutes)
 app.route(API_V1, analysisRoutes)
 app.route(API_V1, authRoutes)
+app.route(API_V1, meRoutes)
 
 // The public callback is also supported because the registered OAuth URI may
 // be https://<domain>/callback rather than the API-prefixed endpoint.

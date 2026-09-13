@@ -18,6 +18,8 @@
 import { z } from 'zod'
 import { callAgent } from '../llm/provider'
 import { llmCounters, parseJsonLoose, type ChatMessage } from '../llm/client'
+import { expandQueries } from '../llm/expand'
+import { env } from '../env'
 import { log } from '../log'
 import { isLive, normalizeAuthority, questionIdFromUrl, search, ZhihuError, zhihuCounters, type ZhihuItem } from '../zhihu/client'
 import { resolveQuestionTitle, rememberHint } from '../zhihu/title'
@@ -43,6 +45,11 @@ const CONTENT_LIMIT = 1500
 const MIN_CONTENT_LEN = 12
 /** 综述上限：目标 80–220 字，超长截断兜底 */
 const SUMMARY_MAX_LEN = 440
+/**
+ * 查询扩写总预算（含重试/限流/主备）。热榜预生成没有交互延迟压力，
+ * 放宽到 15s；扩写失败只会降级为「仅原句」，不影响主流程。
+ */
+const EXPAND_TIMEOUT_MS = 15_000
 
 /* --------------------------- 04 综述 · 刘看山人格 --------------------------- */
 
@@ -721,8 +728,20 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       if (ctx.titleHint?.trim()) rememberHint(qid, ctx.titleHint)
 
       const question = title
-      // 用户提交的问题只触发一次知乎搜索；URL 校验和救援逻辑仍在下方执行。
-      const items = await search(question, 10, { signal: ctx.signal })
+      // 2026-09-13：产品入口收敛为热榜（无用户输入），单题不再受「用户正在等」的交互
+      // 延迟约束 —— 恢复「原句 + LLM 扩写问法」的多路检索（expandQueries + searchDedup，
+      // 两者此前已实现并有回归测试，只是被单路搜索旁路掉了）。
+      // expandQueries 永不抛错：扩写失败/超时自动降级为仅原句 1 路。
+      // 检索路数上限由 PIPELINE_QUERY_VARIANTS 控制（默认 4，设 1 即退回单路）。
+      const queries = (
+        await expandQueries(question, {
+          signal: ctx.signal,
+          deadlineAt: ctx.deadlineAt,
+          timeoutMs: EXPAND_TIMEOUT_MS,
+          context: { qid: ctx.qid, date: ctx.date, stage: 'fetchAnswers', unit: 'expand' },
+        })
+      ).slice(0, env.PIPELINE_QUERY_VARIANTS)
+      const items = await searchDedup(queries, ctx)
       const candidates = items
         .map(toRawAnswer)
         .filter((a): a is RawAnswer => a !== null)

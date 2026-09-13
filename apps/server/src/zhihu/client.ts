@@ -48,7 +48,7 @@ export function isLive(): boolean {
 }
 
 /** 真实调用计数（进程内累计，额度观测/测试报告用；不含任何凭证信息） */
-export const zhihuCounters = { search: 0, hotList: 0, quota: 0 }
+export const zhihuCounters = { search: 0, hotList: 0, quota: 0, userData: 0 }
 
 /**
  * 从知乎 URL 提取问题 id（/question/<digits>/）。
@@ -113,11 +113,12 @@ interface ZhihuEnvelope {
 
 /* -------------------------------- 工具 -------------------------------- */
 
-function authHeaders(): Record<string, string> {
+function authHeaders(extra?: Record<string, string>): Record<string, string> {
   return {
     Authorization: `Bearer ${process.env.ZHIHU_ACCESS_SECRET ?? ''}`,
     'X-Request-Timestamp': String(unixSeconds()),
     'Content-Type': 'application/json',
+    ...(extra ?? {}),
   }
 }
 
@@ -138,10 +139,15 @@ function assertOk(payload: ZhihuEnvelope, op: string): void {
   throw new ZhihuError(`zhihu ${op} failed (code=${code})`, errorCode, retryable, code)
 }
 
-async function getJson(
+/**
+ * 通用 GET（Bearer + 秒级时间戳）。
+ * extraHeaders 用于用户数据接口的 `X-OAuth-Token`——token 只进请求头，
+ * 永不写日志、永不回给前端。
+ */
+export async function zhihuGet(
   path: string,
   params: Record<string, string | number>,
-  opts: { signal?: AbortSignal } = {},
+  opts: { signal?: AbortSignal; extraHeaders?: Record<string, string> } = {},
 ): Promise<ZhihuEnvelope> {
   const url = new URL(path, BASE)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v))
@@ -150,7 +156,7 @@ async function getJson(
   try {
     res = await fetch(url, {
       method: 'GET',
-      headers: authHeaders(),
+      headers: authHeaders(opts.extraHeaders),
       signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
     })
   } catch (e) {
@@ -172,6 +178,8 @@ async function getJson(
     throw new ZhihuError('zhihu response is not json', 'parse_error', true)
   }
 }
+
+const getJson = zhihuGet
 
 /* ------------------------------ 对外能力 ------------------------------ */
 

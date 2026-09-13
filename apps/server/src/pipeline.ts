@@ -28,7 +28,7 @@ import {
 } from './agents/types'
 import { log } from './log'
 import { env } from './env'
-import { runWithBudget } from './budget'
+import { runWithBudget, BUDGET_REFERENCE_MS } from './budget'
 import { assembleClassifications } from './classification'
 
 /** 01 提取：每批回答数（docs/03 §4.1：3–5 条） */
@@ -110,7 +110,9 @@ export async function runPipeline(
   options: PipelineRunOptions = {},
 ): Promise<Analysis> {
   const started = performance.now()
-  const reserveScale = Math.min(1, Math.max(0, ((ctx.deadlineAt ?? Date.now() + 180_000) - Date.now()) / 180_000))
+  // reserveScale（0..1）= 整题剩余预算 / 标定基准（见 budget.ts BUDGET_REFERENCE_MS）。
+  // 短预算下 reserve 等比缩短；长预算被 min(1, ·) 截住（reserve 是下限，不放大）。
+  const reserveScale = Math.min(1, Math.max(0, ((ctx.deadlineAt ?? Date.now() + BUDGET_REFERENCE_MS) - Date.now()) / BUDGET_REFERENCE_MS))
   // ctx.note 由 runner 收集进 job.detail（非致命事件，不改变终态）
   const note = (event: string, fields?: Record<string, unknown>) => {
     log.debug('pipeline.note', { qid: ctx.qid, event })

@@ -4,12 +4,14 @@ import {
   HealthResp,
   HotResp,
   ProgressResp,
-  SearchResp,
+  RelatedResp,
+  ZhihuAuthStatusResp,
   type AnalysisResp,
   type HealthResp as HealthRespT,
   type HotResp as HotRespT,
   type ProgressResp as ProgressRespT,
-  type SearchResp as SearchRespT,
+  type RelatedResp as RelatedRespT,
+  type ZhihuAuthStatusResp as ZhihuAuthStatusT,
 } from '@two-sides/contract'
 
 import { mockApi } from '@/mock/adapter'
@@ -18,6 +20,8 @@ import { passThrough, request, type RequestOptions } from './http'
 /**
  * API 层（增强层 getOpposite 今天不做）。
  * 所有 URL 一律由 contract 的 ENDPOINTS 构造，不手写字符串。
+ *
+ * 产品入口只有热榜（2026-09-13 收敛）：没有「输入问题文字」的搜索端点。
  *
  * live 模式为产品缺省（真实后端）；mock（VITE_API_MODE=mock，需手动开）
  * 保留作离线应急 —— fixtures 与适配器留在仓库，调用方零改动。
@@ -29,17 +33,10 @@ if (API_MODE !== 'live' && API_MODE !== 'mock') {
 }
 export const IS_MOCK = API_MODE === 'mock'
 
-/** 当日热榜（只含已 ready 的预置题） */
+/** 当日热榜（只含已 ready 的预置题）——产品唯一入口 */
 export async function getHot(): Promise<HotRespT> {
   if (IS_MOCK) return mockApi.getHot()
   const { data } = await request(ENDPOINTS.hot, HotResp)
-  return data
-}
-
-/** 文字搜题：冷题入口（知乎对纯 qid 搜索不出结果），服务端去重后 ≤8 条 */
-export async function getSearch(q: string): Promise<SearchRespT> {
-  if (IS_MOCK) return mockApi.getSearch(q)
-  const { data } = await request(ENDPOINTS.search(q), SearchResp)
   return data
 }
 
@@ -47,7 +44,7 @@ export async function getSearch(q: string): Promise<SearchRespT> {
  * 唯一主端点。
  * 200 → 完整快照（AnalysisResp）；202 → 进度或失败（ProgressResp）。
  * 用响应形态而非状态码兜底，避免反向代理改写状态码时判错。
- * title：冷题懒生成的标题提示（来自 /search 候选或上游跳转），只进 query。
+ * title：题名提示，正常路径由热榜预生成写入 question_titles 缓存，无需前端携带。
  */
 export async function getAnalysis(
   qid: string,
@@ -89,13 +86,49 @@ export async function getHealth(): Promise<HealthRespT> {
   return data
 }
 
+/**
+ * 增强层 · 登录态（不产生任何知乎调用；只读服务端会话 cookie）
+ */
+export async function getZhihuStatus(): Promise<ZhihuAuthStatusT> {
+  if (IS_MOCK) return mockApi.getZhihuStatus()
+  const { data } = await request(ENDPOINTS.zhihuStatus, ZhihuAuthStatusResp)
+  return data
+}
+
+/**
+ * 增强层 · 当日热榜题里「与你有关」的那些（收藏过的题 / 收藏过的回答）。
+ * 未登录时后端返回 authorized:false + 空 items（200，不是 403），前端安静降级。
+ * qid 可选：问题页带外打开时额外判定它本身。
+ */
+export async function getRelated(qid?: string): Promise<RelatedRespT> {
+  if (IS_MOCK) return mockApi.getRelated(qid)
+  const { data } = await request(ENDPOINTS.meRelated(qid), RelatedResp)
+  return data
+}
+
+/**
+ * 增强层 · 退出登录（清服务端会话 + 本地信号缓存）
+ */
+export async function logoutZhihu(): Promise<void> {
+  if (IS_MOCK) return
+  await request(ENDPOINTS.zhihuLogout, passThrough, { method: 'POST' })
+}
+
+/** 知乎授权入口：整页跳转（后端 302 到知乎授权页） */
+export function goZhihuAuthorize(): void {
+  window.location.assign(ENDPOINTS.zhihuAuthorize)
+}
+
 // TODO(增强层): getOpposite(judgmentId) —— OAuth 授权后的「光谱另一侧」推荐，
 // 走 ENDPOINTS.meOpposite，未授权返回 403。等活动页 App ID / App Key 批下来再做。
 
 export const api = {
   getHot,
-  getSearch,
   getAnalysis,
   retryAnalysis,
   getHealth,
+  getZhihuStatus,
+  getRelated,
+  logoutZhihu,
+  goZhihuAuthorize,
 }
