@@ -130,7 +130,7 @@ export function startRunner(date: string, qid: string, job: JobRow, titleHint?: 
 }
 
 /**
- * 等待完成的 runner（预生成批次用：小并发批间等待，跑完一个再放下一批）。
+ * 等待完成的 runner（预生成 worker 用：完成后立即领取下一题）。
  * 与 startRunner 同一 runJob 路径：异常在内部收敛为终态 failed，永不 reject。
  */
 export function startRunnerAwait(date: string, qid: string, job: JobRow, titleHint?: string): Promise<void> {
@@ -141,6 +141,8 @@ async function runJob(date: string, qid: string, job: JobRow, titleHint?: string
   const k = jobKey(date, qid)
   const controller = new AbortController()
   running.set(k, controller)
+  const started = performance.now()
+  const deadlineAt = Date.now() + env.JOB_TIMEOUT_SEC * 1000
 
   let timedOut = false
   const timer = setTimeout(() => {
@@ -173,6 +175,7 @@ async function runJob(date: string, qid: string, job: JobRow, titleHint?: string
     date,
     titleHint,
     signal: controller.signal,
+    deadlineAt,
     report(p) {
       progress = { ...progress, ...p }
       flush(false)
@@ -203,7 +206,7 @@ async function runJob(date: string, qid: string, job: JobRow, titleHint?: string
     log.info('job.start', { qid, date, jobId: job.id, attempts: job.attempts, mode: env.PIPELINE_MODE })
 
     const analysis = await runPipeline(createAgents(env.PIPELINE_MODE), ctx)
-    if (controller.signal.aborted) {
+    if (controller.signal.aborted || Date.now() >= deadlineAt) {
       fail(job, job.attempts, {
         code: 'timeout',
         message: ERROR_COPY.timeout.message,
@@ -220,13 +223,14 @@ async function runJob(date: string, qid: string, job: JobRow, titleHint?: string
       JSON.stringify(analysis),
       { ...progress, stage: 'render', stageRatio: 1, detail: notes.slice(-20) },
     )
-    log.info('job.ready', { qid, date, judgments: analysis.judgments.length })
+    log.info('job.ready', { qid, date, judgments: analysis.judgments.length, elapsedMs: Math.round(performance.now() - started) })
   } catch (e) {
     const mapped = classify(e, timedOut || controller.signal.aborted, progress.stage)
     fail(job, job.attempts, { ...mapped, detail: [...notes.slice(-20), { event: 'error', ...errFields(e) }] })
   } finally {
     clearTimeout(timer)
     running.delete(k)
+    log.info('job.finished', { qid, date, elapsedMs: Math.round(performance.now() - started), jobDeadlineExceeded: timedOut || Date.now() >= deadlineAt })
   }
 }
 

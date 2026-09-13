@@ -149,7 +149,7 @@ pnpm build      # 全 workspace 构建
 | `LLM_RPM_LIMIT` | 可选 | `1000` | 全局令牌桶；提取/取向默认并发提高后，仍以此限制总请求速率，可按服务商承载调低 |
 | `PIPELINE_EXTRACT_CONCURRENCY` | 可选 | `30` | 单题提取批次并发；按服务商承载调节 |
 | `PIPELINE_ORIENT_CONCURRENCY` | 可选 | `100` | 单题取向并发；按服务商承载调节 |
-| `PREGENERATE_CONCURRENCY` | 可选 | `4` | 热榜预生成跨题并发；搜索与 LLM 仍受各自限流约束 |
+| `PREGENERATE_CONCURRENCY` | 可选 | `4` | 热榜预生成 worker 数；完成一题立即补位，LLM 仍受全局令牌桶约束 |
 | `ZHIHU_LIVE` | 可选 | `1` | 只有 `=1` 且凭证已配置才允许真实知乎调用；未开启或未配置时直接返回错误。生产应与 `PIPELINE_MODE=llm` 一起设置。 |
 | `PIPELINE_MODE` | 可选 | `llm` | `llm` 走真实多智能体管线；`fake` 仅在显式指定时走本地确定性管线。未配置时默认 `llm`，非法值直接拒绝启动。 |
 | `PIPELINE_FAKE_DURATION_MS` | 可选 | `12000` | fake 管线的模拟时长，留足时间观察轮询与 T1 进度态 |
@@ -207,6 +207,10 @@ docker compose up -d
 - `server` 不对外暴露端口；SQLite 落在具名卷 `two-sides-server-data`
 - **启动自动补生成**：以 `Asia/Shanghai` 判断当天，优先读取 SQLite 中的热榜候选；当天没有候选时抓取前 `PREGENERATE_TOP` 题并生成分析，已有候选则只补未完成题目。后台运行，不阻塞接口启动；已 ready 的快照复用，failed 不自动重跑。榜单和分析写入 `/app/data/two-sides.db`，保存在 `two-sides-server-data` 卷中，重启后继续复用。
 - **每日预生成**仍在进程内于 `Asia/Shanghai 00:30` 触发，与启动检查共用批次并复用当天缓存。需 `ZHIHU_LIVE=1` 且已配置凭证；`PREGENERATE_TOP=0` 关闭自动预生成。外部接口失败会记录日志，HTTP 服务继续运行。
+- **生成耗时控制**：固定 worker 持续补位；归并模型只返回来源编号，本地还原回答和原话。获取内容/提取/归并/取向/综述的阶段上限分别为 45/60/75/45/12 秒，同时受整题剩余时间约束。默认 180 秒整题预算下，前四阶段分别预留 110/75/40/2 秒供后续阶段使用，综述预留 1 秒落库；配置更短整题时限时预留时间同比缩短。提取和取向保留超时前已完成结果；全部失败仍为 failed。综述最多一次调用，失败或时间不足时省略综述并保存分析。
+- **重试和扩写**：提取/归并/取向/救援/扩写每次最多 2 个 HTTP 尝试，主备共用次数和总截止时间；限流等待、退避、响应体读取和校验都计入。搜索框扩写总上限 3 秒，管线扩写总上限 10 秒；可选救援总上限 10 秒，失败保留已取得的同题来源。
+- **生产观测**：按 `qid`、`date` 查看 `pipeline.stage.done` 的 `elapsedMs` 与 `outcome`，以及 `job.ready`/`job.finished` 的整题耗时。`llm.call.ok`/`llm.call.fail` 的 `latencyMs` 包含当前调用全部尝试和主备路径，`attempts` 为已发出的 HTTP 次数，`rateLimitWaitMs` 为限流等待；`usage` 与 `tokens` 累计供应商返回的消耗（含校验失败的响应）。超时未返回 usage 的消耗无法计入。`unit` 区分并发批次或判断；这些指标无需打印输入、输出或凭证。
+- **离线回归**：`pnpm -F @two-sides/server regression:test` 验证启动补生成、队列补位、来源归属、重试总预算和综述降级，使用临时数据与模拟网络；GHCR 发布前自动执行。
 - **TLS / 对外反代不归 compose 管**：自行部署反代指向 `127.0.0.1:8080` 终止 HTTPS
 - 秒开验收标准：热榜页与预置题 **TTFB < 200ms、渲染路径无任何实时生成调用**
 - ⚠️ **上线检查**：`.env` 里 `ZHIHU_LIVE=1` 与 `PIPELINE_MODE=llm` 必须成对设置，并确认知乎与 LLM 凭证已配置；缺失时应看到明确错误，而不是假数据

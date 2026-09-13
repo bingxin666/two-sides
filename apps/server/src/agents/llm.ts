@@ -223,8 +223,12 @@ async function rescueMerge(
         ],
         jsonMode: true,
         temperature: 0.1,
-        timeoutMs: 60_000,
+        timeoutMs: 10_000,
         signal: ctx.signal,
+        // Rescue is optional: leave time to return the on-topic/Tier 1 pool.
+        deadlineAt: Math.min((ctx.deadlineAt ?? Infinity) - 1_000, Date.now() + 10_000),
+        maxAttempts: 2,
+        context: { qid: ctx.qid, date: ctx.date, stage: 'fetchAnswers', unit: 'rescue' },
         validate: (raw) => RescueVerdictOut.parse(parseJsonLoose(raw)),
       })
       const yes = new Set(r.content.verdicts.filter((v) => v.sameDiscussion).map((v) => v.qid))
@@ -295,10 +299,20 @@ function toRawAnswer(it: ZhihuItem): RawAnswer | null {
 async function searchDedup(variants: string[], ctx: PipelineContext): Promise<ZhihuItem[]> {
   const seen = new Map<string, ZhihuItem>()
   for (let i = 0; i < variants.length; i++) {
+    if (ctx.signal.aborted || (ctx.deadlineAt !== undefined && Date.now() >= ctx.deadlineAt)) {
+      throw new PipelineError('search budget exhausted', 'timeout', 'extract', true)
+    }
+    const remainingMs = (ctx.deadlineAt ?? Infinity) - Date.now()
+    if (remainingMs <= 1_000) break
     const v = variants[i]!
     try {
       // Count 上限 10：服务端 >10 截断、<=0 回退 10，这里显式传 10
-      const items = await search(v, 10)
+      const items = await search(v, 10, {
+        signal: AbortSignal.any([
+          ctx.signal,
+          AbortSignal.timeout(Math.max(1, Math.floor(Math.min(15_000, remainingMs - 1_000)))),
+        ]),
+      })
       for (const it of items) {
         const key = (it.ContentID ?? '').trim() || answerIdFromUrl(it.Url ?? '') || (it.Url ?? '').trim()
         if (!key || seen.has(key)) continue
@@ -477,6 +491,72 @@ export function normalizeMergedJudgments(
   ]
 }
 
+/** Compact merge output refers to extracted judgments, never to model-copied quotes. */
+export interface SourceMergeCandidate {
+  text: string
+  sourceIds?: string[]
+  factionGroups?: Array<{ label: string; sourceIds?: string[] }>
+}
+
+export function normalizeSourceMergedJudgments(
+  items: ExtractedJudgment[],
+  candidates: SourceMergeCandidate[],
+  maxJudgments = 15,
+  maxFallbacks = 5,
+): MergedJudgment[] {
+  const sourceById = new Map(items.map((item, i) => [`x${i + 1}`, item]))
+  const knownIds = (ids: string[] = []) => [...new Set(ids)].filter((id) => sourceById.has(id))
+  const restore = (ids: string[]) => ({
+    answerIds: [...new Set(ids.map((id) => sourceById.get(id)!.answerId))],
+    sourceQuotes: [...new Set(ids.map((id) => sourceById.get(id)!.quote))],
+  })
+  const merged = candidates.flatMap((candidate, index) => {
+    // A repeated faction label accumulates its exact references without duplicating output.
+    const groupIds = new Map<string, string[]>()
+    for (const group of candidate.factionGroups ?? []) {
+      const label = group.label.trim()
+      const ids = knownIds(group.sourceIds)
+      if (!label || ids.length === 0) continue
+      groupIds.set(label, knownIds([...(groupIds.get(label) ?? []), ...ids]))
+    }
+    const sourceIds = knownIds([
+      ...(candidate.sourceIds ?? []),
+      ...[...groupIds.values()].flat(),
+    ])
+    if (sourceIds.length === 0) return []
+    const factionGroups = [...groupIds].map(([label, ids]) => ({ label, ...restore(ids) }))
+    return [{
+      sourceIds,
+      judgment: {
+        id: `j${index + 1}`,
+        text: candidate.text,
+        ...restore(sourceIds),
+        factionHints: factionGroups.map((group) => group.label),
+        factionGroups,
+      } satisfies MergedJudgment,
+    }]
+  })
+
+  // Coverage uses the exact extraction ID. Shared quotes or multiple views from one
+  // answer cannot accidentally hide an omitted minority judgment.
+  const retained = merged.slice(0, maxJudgments)
+  const covered = new Set(retained.flatMap((entry) => entry.sourceIds))
+  const orphanIds = [...sourceById.keys()].filter((id) => !covered.has(id))
+  const fallbackBudget = Math.min(orphanIds.length, maxFallbacks, maxJudgments)
+  const modelJudgments = retained.slice(0, maxJudgments - fallbackBudget)
+  const orphanFallbacks = orphanIds.slice(0, fallbackBudget).map((id, index) => {
+    const item = sourceById.get(id)!
+    const label = item.factionHint?.trim()
+    return {
+      id: `jfallback${index + 1}`,
+      text: item.text,
+      ...restore([id]),
+      ...(label ? { factionHints: [label], factionGroups: [{ label, ...restore([id]) }] } : {}),
+    }
+  })
+  return [...modelJudgments.map((entry) => entry.judgment), ...orphanFallbacks]
+}
+
 /* ---------------------------- 02 归并 Agent ---------------------------- */
 
 const MergeOut = z.object({
@@ -485,17 +565,11 @@ const MergeOut = z.object({
       z.object({
         /** 去重后的代表表述 */
         text: z.string().min(4).max(160),
-        // 上限放宽到 12（救援合并放大内容池后，实测模型单判断会给出 >4 条原话）；
-        // 服务端截回 4 —— 该字段只进 orient 内部上下文，不出契约
-        sourceQuotes: z.array(z.string().min(2).max(300)).max(12).default([]),
-        /** 参与该议题的原回答 id */
-        answerIds: z.array(z.string().min(1)).max(20).default([]),
-        /** 同一议题下真实存在的 2–4 个立场家族，供取向阶段保留多峰 */
-        factionHints: z.array(z.string().min(2).max(60)).max(6).default([]),
+        // 未分组来源可在顶层补充；原话和回答 id 全部由 xN 在本地还原。
+        sourceIds: z.array(z.string().min(1).max(16)).max(1000).default([]),
         factionGroups: z.array(z.object({
           label: z.string().min(2).max(60),
-          answerIds: z.array(z.string().min(1)).max(20).default([]),
-          sourceQuotes: z.array(z.string().min(2).max(300)).max(12).default([]),
+          sourceIds: z.array(z.string().min(1).max(16)).max(1000).default([]),
         })).max(6).default([]),
       }),
     )
@@ -504,18 +578,18 @@ const MergeOut = z.object({
 })
 
 const MERGE_SYSTEM = [
-  '你是「两面」系统的 02 归并 Agent。输入是一批已抽取的判断句（JSON，含来源回答 id）。',
+  '你是「两面」系统的 02 归并 Agent。输入是一批已抽取的判断句（JSON），每条判断有唯一 id（如 x1），含原话和立场线索。',
   '硬约束：',
   '1. 先把输入判断按“它们到底在讨论同一个什么问题”聚成少量清晰的共同命题。相同对象、相同核心问题，只是换了说法、换了例子、换了论据、强调了不同后果，都应归到同一个命题。',
   '2. 输出的 text 是中性、具体、可被多方回答的命题，而不是某一派的结论。比如“应该强制标注”“不需要强制标注”“标注会增加成本”都可以围绕同一个命题“AI 生成内容是否应该强制标注”联系起来。',
   '3. 同一命题下的赞成、反对、条件赞成、风险保留、前提质疑，都合并到同一个 judgment；把它们作为不同 faction 交给 03 取向，保留多峰分布。相反结论本身不是拆分理由。',
   '4. 不要把“效率更高”“成本更低”“更容易落地”仅因为论据不同就拆成三个观点：如果它们都在回答同一核心问题，应合并，原话全部作为来源保留。',
   '5. 只有对象、人群、前提条件、时间范围、因果链或价值权衡真正改变，才拆成不同 judgment。不同问题不要为了减少条数硬合并。',
-  '6. 禁止用“要综合看”“各有道理”这类宽泛上位句吞掉细分分歧；factionHints 写出该命题下从原话中确认的 2–4 个立场家族，并用 factionGroups 把每个派系对应到 answerIds/sourceQuotes，不要凭空制造派系。',
+  '6. 禁止用“要综合看”“各有道理”这类宽泛上位句吞掉细分分歧；factionGroups 的 label 写出该命题下从原话中确认的 2–4 个立场家族，sourceIds 只列属于该派系的输入判断 id，不要凭空制造派系。',
   '7. 归并前先在脑中做一次“同义改写、上下位表达、论据与结论”的检查：优先得到 6–12 个覆盖面更完整的命题，而不是把每个回答句子各自变成一条。只有确实不同的命题才保留更多条。',
-  '8. 合并时保留全部来源：answerIds 必须是被合并判断的原 answerId，sourceQuotes 从被合并判断的 quote 里取。一个 answerId 可以同时参与多个不同 judgment，但同一命题的不同 faction 应留在同一 judgment。',
+  '8. 合并时保留全部来源，用 sourceIds 引用输入判断 id；原话和回答 id 由系统精确还原，不要抄写。已在 factionGroups 引用的 id 不在顶层重复；无法分组的来源才放顶层 sourceIds。同一回答的不同判断可以参与不同命题，但同一命题的不同派系应留在同一 judgment。',
   '9. 不做立场裁决、不改写含义、不丢弃少数派表述；最终最多 15 条，优先覆盖不同命题，并确保每个命题的主要派系都有来源。',
-  '输出 JSON：{"judgments":[{"text":"具体判断","factionHints":["派系A","派系B"],"factionGroups":[{"label":"派系A","answerIds":["回答id"],"sourceQuotes":["原话"]}],"sourceQuotes":["原话"],"answerIds":["回答id"]}]}。',
+  '输出 JSON：{"judgments":[{"text":"具体命题","factionGroups":[{"label":"派系A","sourceIds":["x1","x3"]},{"label":"派系B","sourceIds":["x2"]}]}]}。每个 sourceId 必须来自输入；只输出以上字段和必要时的顶层 sourceIds，不输出解释。',
 ].join('\n')
 
 /* ---------------------------- 03 取向 Agent ---------------------------- */
@@ -569,7 +643,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
     userPayload: unknown,
     ctx: PipelineContext,
     stage: 'extract' | 'merge' | 'orient',
-    /** 单次调用超时：merge 输入大、模型慢（实测 >60s），给更长预算 */
+    /** Per-attempt upper bound; the shared stage deadline also bounds retries. */
     timeoutMs = 90_000,
   ): Promise<T> {
     const messages: ChatMessage[] = [
@@ -583,6 +657,9 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
         temperature: 0.2, // 结构化抽取要稳定，温度压低
         timeoutMs,
         signal: ctx.signal,
+        deadlineAt: ctx.deadlineAt,
+        maxAttempts: 2,
+        context: { qid: ctx.qid, date: ctx.date, stage, unit: ctx.unit },
         // 结构化输出校验：解析失败按「解析失败」重试（docs/03 §3.1）
         validate: (raw) => schema.parse(parseJsonLoose(raw)),
       })
@@ -590,17 +667,18 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
         provider: res.provider,
         path: res.path,
         latencyMs: res.latencyMs,
+        attempts: res.attempts,
+        rateLimitWaitMs: res.rateLimitWaitMs,
         tokens: res.usage?.totalTokens ?? 0,
       })
       return res.content
     } catch (e) {
       const kind = e instanceof Error && 'kind' in e ? String((e as { kind: unknown }).kind) : 'unknown'
       ctx.note(`llm.${agent}.failed`, { kind })
-      // parse（含 zod 校验失败）→ parse_error；其余 → llm_error（docs/03 §6.2）
-      const mapped = kind === 'parse' ? 'parse_error' : 'llm_error'
+      const mapped = kind === 'parse' ? 'parse_error' : kind === 'timeout' || kind === 'aborted' ? 'timeout' : 'llm_error'
       throw new PipelineError(
         `${agent} 调用失败（${kind}）: ${e instanceof Error ? e.message.slice(0, 160) : String(e).slice(0, 160)}`,
-        mapped as 'parse_error' | 'llm_error',
+        mapped,
         stage,
         true,
       )
@@ -638,7 +716,11 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       const question = title
       // ② 查询生成：LLM 语义扩写（原句 + ≤3 个相似问法，2026-09-12 用户拍板，
       //    替代已删除的 8 个机械后缀变体）。扩写失败/超时 → 退回仅原句（expand.degraded）。
-      const variants = await expandQueries(question, { signal: ctx.signal })
+      const variants = await expandQueries(question, {
+        signal: ctx.signal,
+        deadlineAt: ctx.deadlineAt,
+        context: { qid: ctx.qid, date: ctx.date, stage: 'fetchAnswers' },
+      })
 
       // ② 变体搜索 + 按 answerId 去重
       const items = await searchDedup(variants, ctx)
@@ -747,7 +829,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       }))
       const out = await callJson('merge', MergeOut, MERGE_SYSTEM, payload, ctx, 'merge', 120_000)
 
-      const out2 = normalizeMergedJudgments(items, out.judgments ?? [])
+      const out2 = normalizeSourceMergedJudgments(items, out.judgments ?? [])
       const orphanCount = out2.filter((item) => item.id.startsWith('jfallback')).length
       if (orphanCount > 0) {
         ctx.note('merge.orphan_preserved', { preserved: orphanCount })
@@ -888,6 +970,11 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
         ],
         temperature: 0.6, // 人格需要活性，比结构化抽取高，比闲聊低
         signal: ctx.signal,
+        timeoutMs: 12_000,
+        deadlineAt: Math.min(ctx.deadlineAt ?? Infinity, Date.now() + 12_000),
+        maxAttempts: 1,
+        maxTokens: 1_200,
+        context: { qid: ctx.qid, date: ctx.date, stage: 'summary' },
       })
       ctx.note('summary.liukanshan.ok', { tokens: r.usage?.totalTokens ?? 0 })
       return { summary: truncate(r.content, SUMMARY_MAX_LEN), source: 'liukanshan' }

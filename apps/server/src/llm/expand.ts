@@ -12,14 +12,13 @@
  */
 
 import { z } from 'zod'
-import { callAgent } from './provider'
+import { callAgent, type CallOptions } from './provider'
 import { parseJsonLoose } from './client'
 import { log } from '../log'
 
-/** 单次扩写超时上限（毫秒）。默认 10s：origami 实测首响 4–10s，3s 会让扩写
+/** 扩写总超时上限（毫秒，含重试/限流/主备）。默认 10s：origami 实测首响 4–10s，3s 会让扩写
  * 永远降级（管线空转）；/search 交互路径显式传 3000（搜索框 UX 护栏，spec 口径） */
 const EXPAND_TIMEOUT_DEFAULT_MS = 10_000
-const EXPAND_TIMEOUT_SEARCH_MS = 3_000
 
 /** 模型直接输出 JSON 字符串数组（spec 口径「字符串数组恰好 3 项」），无包裹对象。
  * 模型偶尔超发：放宽到 5，服务端裁到 3。 */
@@ -43,13 +42,14 @@ export const expandCounters = { calls: 0, degraded: 0 }
  */
 export async function expandQueries(
   title: string,
-  opts: { signal?: AbortSignal; timeoutMs?: number } = {},
+  opts: { signal?: AbortSignal; timeoutMs?: number; deadlineAt?: number; context?: CallOptions<unknown>['context'] } = {},
 ): Promise<string[]> {
   const original = title.trim()
   if (!original) return []
   const out = [original]
 
   expandCounters.calls++
+  const timeoutMs = opts.timeoutMs ?? EXPAND_TIMEOUT_DEFAULT_MS
   try {
     const r = await callAgent('expand', {
       messages: [
@@ -58,17 +58,22 @@ export async function expandQueries(
       ],
       jsonMode: true,
       temperature: 0.7,
-      timeoutMs: opts.timeoutMs ?? EXPAND_TIMEOUT_DEFAULT_MS,
+      timeoutMs,
+      deadlineAt: Math.min(opts.deadlineAt ?? Infinity, Date.now() + timeoutMs),
+      maxAttempts: 2,
+      context: opts.context,
       signal: opts.signal,
-      validate: (raw) => QueriesOut.parse(parseJsonLoose(raw)),    })
+      validate: (raw) => QueriesOut.parse(parseJsonLoose(raw)),
+    })
     for (const q of r.content.slice(0, 3)) {
       const s = q.trim()
       if (s && !out.includes(s)) out.push(s)
     }
-    log.info('expand.queries', { queries: out })
+    log.info('expand.queries', { ...opts.context, count: out.length })
   } catch (e) {
     expandCounters.degraded++
     log.warn('expand.degraded', {
+      ...opts.context,
       degradedTotal: expandCounters.degraded,
       reason: e instanceof Error ? e.message.slice(0, 160) : String(e).slice(0, 160),
     })

@@ -87,6 +87,7 @@ function timed(agents: PipelineAgents): PipelineAgents {
 /* --------------------------------- 上下文 --------------------------------- */
 
 const controller = new AbortController()
+const deadlineAt = Date.now() + 180_000
 const overallTimer = setTimeout(() => controller.abort(), 180_000)
 
 const ctx: PipelineContext = {
@@ -94,6 +95,7 @@ const ctx: PipelineContext = {
   date: todayKey(),
   ...(titleHint ? { titleHint } : {}),
   signal: controller.signal,
+  deadlineAt,
   report(p) {
     console.log(
       `[progress] ${p.stage ?? '?'} ratio=${(p.stageRatio ?? 0).toFixed(2)} sample=${p.sampleCount ?? 0} judgments=${p.judgmentsDone ?? 0}/${p.judgmentsTotal ?? 0}`,

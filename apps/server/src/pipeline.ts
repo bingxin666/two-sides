@@ -5,7 +5,7 @@
  *   01 提取：批量化（一次 3–5 条回答），默认信号量 30；单批失败丢弃该批并记 detail，不阻塞其他批
  *   02 归并：1 路串行；失败 → 整体 failed(llm_error)
  *   03 取向：每判断 1 个，默认信号量 100；部分失败保留 orientStatus:"partial"，不阻塞整体
- *   04 综述：1 路；直答优先，额度耗尽降级 summaryFallback
+ *   04 综述：1 路、最多12秒；失败或预算不足时省略综述，保留判断快照
  *
  * 实现选择由 createAgents(mode) 决定：
  *   fake（仅显式开启，确定性、不联网） / llm（真实调用）
@@ -27,6 +27,7 @@ import {
 } from './agents/types'
 import { log } from './log'
 import { env } from './env'
+import { runWithBudget } from './budget'
 
 /** 01 提取：每批回答数（docs/03 §4.1：3–5 条） */
 const EXTRACT_BATCH_SIZE = 4
@@ -53,6 +54,45 @@ export function batchAnswers(answers: RawAnswer[], size = EXTRACT_BATCH_SIZE): R
   return out
 }
 
+/** Keep completed fan-out results when a slower sibling reaches the phase deadline. */
+async function partialStage<T, R>(
+  ctx: PipelineContext,
+  phase: 'extract' | 'orient',
+  reserveScale: number,
+  items: T[],
+  limit: number,
+  run: (item: T, index: number, scoped: PipelineContext) => Promise<R>,
+  onError: (item: T, index: number, error: unknown) => void,
+  usable: (result: R) => boolean = () => true,
+): Promise<Array<R | null>> {
+  const completed: Array<R | null> = items.map(() => null)
+  try {
+    return await runWithBudget(ctx, phase, reserveScale, (scoped) => mapPool(
+      items, limit,
+      async (item, index) => {
+        const check = () => {
+          if (scoped.signal.aborted || Date.now() >= scoped.deadlineAt!) {
+            throw new PipelineError(`${phase} budget exhausted`, 'timeout', phase, true)
+          }
+        }
+        check()
+        const result = await run(item, index, scoped)
+        check()
+        completed[index] = result
+        return result
+      },
+      (item, index, error) => { if (!scoped.signal.aborted) onError(item, index, error) },
+    ))
+  } catch (e) {
+    if (e instanceof PipelineError && e.mapped === 'timeout' && !ctx.signal.aborted &&
+      completed.some((x) => x !== null && usable(x))) {
+      ctx.note(`${phase}.partialTimeout`, { completed: completed.filter((x) => x !== null).length, total: items.length })
+      return completed
+    }
+    throw e
+  }
+}
+
 /**
  * 跑完四阶段，返回符合契约的 Analysis。
  * 任何不可恢复失败抛 PipelineError（由 jobs.ts 映射成终态 failed）。
@@ -61,6 +101,8 @@ export async function runPipeline(
   agents: PipelineAgents,
   ctx: PipelineContext,
 ): Promise<Analysis> {
+  const started = performance.now()
+  const reserveScale = Math.min(1, Math.max(0, ((ctx.deadlineAt ?? Date.now() + 180_000) - Date.now()) / 180_000))
   // ctx.note 由 runner 收集进 job.detail（非致命事件，不改变终态）
   const note = (event: string, fields?: Record<string, unknown>) => {
     log.debug('pipeline.note', { qid: ctx.qid, event })
@@ -68,7 +110,8 @@ export async function runPipeline(
   }
 
   /* ---------- 获取内容 ---------- */
-  const { question, answers, mergedQuestions } = await agents.fetchAnswers(ctx.qid, ctx)
+  const { question, answers, mergedQuestions } = await runWithBudget(ctx, 'fetchAnswers', reserveScale,
+    (scoped) => agents.fetchAnswers(ctx.qid, scoped))
   if (answers.length === 0) {
     throw new PipelineError('未取到任何回答', 'zhihu_error', 'extract', true)
   }
@@ -81,16 +124,17 @@ export async function runPipeline(
   /* ---------- 01 提取 ---------- */
   const batches = batchAnswers(answers)
   const extractErrors: unknown[] = []
-  const extracted = await mapPool(
+  const extracted = await partialStage(ctx, 'extract', reserveScale,
     batches,
     EXTRACT_CONCURRENCY,
-    (batch) => agents.extract(batch, ctx),
+    (batch, index, scoped) => agents.extract(batch, { ...scoped, unit: `batch-${index + 1}` }),
     (_batch, index, e) => {
       extractErrors.push(e)
       note(`extract.batch.${index}.failed`, {
         reason: e instanceof Error ? e.message.slice(0, 200) : String(e).slice(0, 200),
       })
     },
+    (result) => result.length > 0,
   )
   const judgmentsRaw = extracted
     .filter((x): x is NonNullable<typeof x> => x !== null)
@@ -118,7 +162,7 @@ export async function runPipeline(
   ctx.report({ stage: 'merge', stageRatio: 0, judgmentsTotal: 0 })
   let merged: MergedJudgment[]
   try {
-    merged = await agents.merge(judgmentsRaw, ctx)
+    merged = await runWithBudget(ctx, 'merge', reserveScale, (scoped) => agents.merge(judgmentsRaw, scoped))
   } catch (e) {
     if (e instanceof PipelineError) throw e // agent 已归类（含 parse_error）
     throw new PipelineError(
@@ -135,11 +179,12 @@ export async function runPipeline(
 
   /* ---------- 03 取向 ---------- */
   let oriented = 0
+  ctx.report({ stage: 'orient', stageRatio: 0, judgmentsTotal: merged.length })
   const orientErrors: unknown[] = []
-  const orientResults = await mapPool(
+  const orientResults = await partialStage(ctx, 'orient', reserveScale,
     merged,
     ORIENT_CONCURRENCY,
-    (j) => agents.orient(j, answers, ctx),
+    (j, _index, scoped) => agents.orient(j, answers, { ...scoped, unit: j.id }),
     (j, _i, e) => {
       orientErrors.push(e)
       note(`orient.${j.id}.failed`, {
@@ -172,7 +217,7 @@ export async function runPipeline(
   let summaryText: string | undefined
   let summarySource: 'liukanshan' | 'zhida' | 'fallback' | undefined
   try {
-    const s = await agents.summarize(answers, judgments, ctx)
+    const s = await runWithBudget(ctx, 'summary', reserveScale, (scoped) => agents.summarize(answers, judgments, scoped))
     if (s.summary) {
       summaryText = s.summary
       summarySource = s.source ?? 'fallback'
@@ -193,6 +238,9 @@ export async function runPipeline(
   }
 
   /* ---------- 组装 ---------- */
+  if (ctx.signal.aborted || (ctx.deadlineAt !== undefined && Date.now() >= ctx.deadlineAt)) {
+    throw new PipelineError('job deadline exhausted', 'timeout', 'render', true)
+  }
   const judgmentsOut: Judgment[] = judgments
     // §5.2 规则 6：participantCount === 0 的判断直接丢弃
     .filter((j) => j.participantCount > 0)
@@ -246,6 +294,8 @@ export async function runPipeline(
 
   log.info('pipeline.done', {
     qid: ctx.qid,
+    date: ctx.date,
+    elapsedMs: Math.round(performance.now() - started),
     answers: answers.length,
     judgments: judgmentsOut.length,
     summarySource: summarySource ?? 'none',

@@ -141,6 +141,7 @@ function assertOk(payload: ZhihuEnvelope, op: string): void {
 async function getJson(
   path: string,
   params: Record<string, string | number>,
+  opts: { signal?: AbortSignal } = {},
 ): Promise<ZhihuEnvelope> {
   const url = new URL(path, BASE)
   for (const [k, v] of Object.entries(params)) url.searchParams.set(k, String(v))
@@ -150,7 +151,7 @@ async function getJson(
     res = await fetch(url, {
       method: 'GET',
       headers: authHeaders(),
-      signal: AbortSignal.timeout(15_000),
+      signal: opts.signal ? AbortSignal.any([opts.signal, AbortSignal.timeout(15_000)]) : AbortSignal.timeout(15_000),
     })
   } catch (e) {
     throw new ZhihuError(`zhihu network error: ${String(e).slice(0, 200)}`, 'zhihu_error', true)
@@ -206,14 +207,14 @@ export async function hotList(limit = 30): Promise<HotQuestion[]> {
 }
 
 /** 知乎搜索 GET /api/v1/content/zhihu_search：Count 最大 10，>10 截断 */
-export async function search(query: string, count = 10): Promise<ZhihuItem[]> {
+export async function search(query: string, count = 10, opts: { signal?: AbortSignal } = {}): Promise<ZhihuItem[]> {
   if (!isLive()) throw new ZhihuError('zhihu disabled (ZHIHU_LIVE=0)', 'zhihu_error', false)
   if (!query.trim()) throw new ZhihuError('zhihu search: empty query', 'parse_error', false)
   zhihuCounters.search++
   const payload = await getJson('/api/v1/content/zhihu_search', {
     Query: query,
     Count: Math.max(1, Math.min(10, count)),
-  })
+  }, opts)
   assertOk(payload, 'zhihu_search')
   const items = itemsOf(payload).filter((it) => it.ContentType !== 'Article')
   log.info('zhihu.search', { count: items.length })

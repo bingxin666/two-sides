@@ -10,7 +10,8 @@
  */
 
 import { z } from 'zod'
-import { chat, LlmError, type ChatMessage, type ChatResult } from './client'
+import { chat, LlmError, addUsage, assertCallActive, attemptLimit, attemptTimeout,
+  type CallContext, type ChatMessage, type ChatResult, type LlmStats, type TokenUsage } from './client'
 import { env, hasEnv } from '../env'
 import { log } from '../log'
 import { existsSync, readFileSync } from 'node:fs'
@@ -167,9 +168,12 @@ export interface CallOptions<T> {
   temperature?: number
   maxTokens?: number
   timeoutMs?: number
+  deadlineAt?: number
+  maxAttempts?: number
+  context?: CallContext
   signal?: AbortSignal
   /** 结构化输出校验（zod parse 包装） */
-  validate?: (raw: string) => T
+  validate?: (raw: string) => T | Promise<T>
 }
 
 export interface AgentCallResult<T> extends ChatResult<T> {
@@ -187,20 +191,51 @@ export async function callAgent<T = string>(
   agent: AgentName,
   opts: CallOptions<T>,
 ): Promise<AgentCallResult<T>> {
+  const started = performance.now()
+  const maxAttempts = attemptLimit(opts.maxAttempts)
+  const deadlineAt = opts.deadlineAt ?? Date.now() + attemptTimeout(opts.timeoutMs) * maxAttempts
   const useFallback = failures(agent) >= FAILOVER_THRESHOLD
   const order: Array<'primary' | 'fallback'> = useFallback
     ? ['fallback', 'primary']
     : ['primary', 'fallback']
 
-  let lastErr: unknown = null
-  for (const path of order) {
-    const target = resolveAgent(agent, path)
-    // 「未配置」（yaml 里没绑 / env 里没 key）在解析期就被跳过：
-    // 不发起请求、也不计入 failover 阈值 —— 否则 D1 场景下
-    // deepseek/glm/qwen 都没配 key 时，每个请求都要先空转 3 次「假失败」才落到 origami。
-    // 只有「真的发出去并失败了」才 noteFailure()。
-    if (!target) continue
+  let attempts = 0
+  let rateLimitWaitMs = 0
+  let usage: TokenUsage | undefined
+  const stats = (): LlmStats => ({ latencyMs: Math.round(performance.now() - started), attempts, rateLimitWaitMs, usage })
+  const accumulate = (part: LlmStats): void => {
+    attempts += part.attempts
+    rateLimitWaitMs += part.rateLimitWaitMs
+    usage = addUsage(usage, part.usage)
+  }
+  const cumulativeError = (error: LlmError): LlmError => new LlmError(error.message, error.kind, error.status, stats())
+  let lastErr: LlmError | undefined
+  // An absent fallback resolves to the primary in resolveAgent. Deduplicate that
+  // target before allocating the shared attempt budget.
+  const seen = new Set<string>()
+  const targets: ResolvedTarget[] = []
+  try {
+    assertCallActive(opts.signal, deadlineAt)
+    for (const path of order) {
+      const target = resolveAgent(agent, path)
+      if (!target) continue
+      const identity = JSON.stringify([target.provider, target.model])
+      if (seen.has(identity)) continue
+      seen.add(identity)
+      targets.push(target)
+    }
+  } catch (e) {
+    throw cumulativeError(e instanceof LlmError ? e : new LlmError('provider configuration invalid', 'config'))
+  }
+  for (const [index, target] of targets.entries()) {
+    const path = target.path
     try {
+      assertCallActive(opts.signal, deadlineAt)
+      const remainingAttempts = maxAttempts - attempts
+      if (remainingAttempts <= 0) break
+      // Reserve one attempt for a distinct fallback; every actual HTTP request
+      // still spends the same per-call budget (default three across both paths).
+      const pathAttempts = index + 1 < targets.length ? Math.max(1, remainingAttempts - 1) : remainingAttempts
       const res = await chat<T>({
         baseUrl: target.baseUrl,
         apiKey: target.apiKey,
@@ -210,36 +245,55 @@ export async function callAgent<T = string>(
         temperature: opts.temperature,
         maxTokens: opts.maxTokens,
         timeoutMs: opts.timeoutMs,
+        deadlineAt,
+        maxAttempts: pathAttempts,
+        context: opts.context,
         signal: opts.signal,
         validate: opts.validate,
       })
+      accumulate(res)
       noteSuccess(agent)
+      const cumulative = stats()
       log.info('llm.call.ok', {
+        ...opts.context,
         agent,
         provider: target.provider,
         model: target.model,
         path,
-        latencyMs: res.latencyMs,
-        tokens: res.usage?.totalTokens ?? 0,
+        ...cumulative,
+        tokens: cumulative.usage?.totalTokens ?? 0,
       })
-      return { ...res, agent, provider: target.provider, path }
+      return { ...res, ...cumulative, agent, provider: target.provider, path }
     } catch (e) {
-      lastErr = e
-      const kind = e instanceof LlmError ? e.kind : 'network'
+      lastErr = e instanceof LlmError ? e : new LlmError('llm provider request failed', 'network')
+      accumulate(lastErr.stats)
+      const deadlineExceeded = Date.now() >= deadlineAt
+      const kind = deadlineExceeded ? 'timeout' : lastErr.kind
       log.warn('llm.call.fail', {
+        ...opts.context,
         agent,
         provider: target.provider,
         model: target.model,
         path,
         kind,
-        consecutive: failures(agent) + 1,
+        ...stats(),
+        tokens: usage?.totalTokens ?? 0,
       })
-      noteFailure(agent)
-      // 配置类问题直接试下一条路径；网络/解析问题也交给下一条路径兜底
-      continue
+      // Cancellation and an exhausted wall-clock budget can never initiate a
+      // fallback request. Waiting for rate capacity alone is not provider failure.
+      // A phase timer may abort at the exact deadline: that is a provider
+      // timeout when an HTTP attempt was sent, and must inform future failover.
+      if (deadlineExceeded) {
+        if (lastErr.stats.attempts > 0) noteFailure(agent)
+        throw cumulativeError(new LlmError('llm total deadline exceeded', 'timeout'))
+      }
+      if (opts.signal?.aborted || kind === 'aborted') {
+        throw cumulativeError(new LlmError('llm call aborted', 'aborted'))
+      }
+      if (lastErr.stats.attempts > 0) noteFailure(agent)
     }
   }
-  throw lastErr ?? new LlmError(`agent "${agent}" has no configured provider`, 'config')
+  throw cumulativeError(lastErr ?? new LlmError(`agent "${agent}" has no configured provider`, 'config'))
 }
 
 /** 启动自检：每个 Agent 的主/备路径是否可解析（只给布尔，不给 key） */

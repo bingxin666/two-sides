@@ -1,16 +1,6 @@
-/**
- * OpenAI 兼容 LLM 客户端（原生 fetch，不引重 SDK）
- *
- * docs/03 §3.1：
- *  - 强制 JSON：prompt 内嵌 schema + response_format json_object；不支持的服务商降级为「解析失败即重试」
- *  - 超时 60s/次；指数退避重试 2 次（429/5xx/网络/解析失败才重试，400 直接失败）
- *  - 每次调用先过全局令牌桶
- *  - 调用方给 validate（zod）做结构校验，本模块只负责把 content 交给它
- *
- * 安全：apiKey 只出现在 Authorization 头里，任何分支都不写入日志/错误对象。
- */
-
-import { llmBucket } from '../ratelimit'
+/** OpenAI-compatible client. One deadline covers capacity waits, body reads,
+ * validation and every retry. Upstream bodies/errors never enter diagnostics. */
+import { llmBucket, TokenWaitError } from '../ratelimit'
 import { log } from '../log'
 
 export interface ChatMessage {
@@ -18,27 +8,47 @@ export interface ChatMessage {
   content: string
 }
 
+export interface CallContext {
+  qid?: string
+  date?: string
+  stage?: string
+  unit?: string
+}
+
 export interface ChatRequest {
   baseUrl: string
   apiKey: string
   model: string
   messages: ChatMessage[]
-  /** 是否要求 JSON 对象输出（不支持的服务商会忽略，退化为解析失败重试） */
   jsonMode?: boolean
   temperature?: number
   maxTokens?: number
+  /** Per-attempt limit; deadlineAt is the shared total limit. */
   timeoutMs?: number
+  deadlineAt?: number
+  maxAttempts?: number
+  context?: CallContext
   signal?: AbortSignal
-  /** 调用方提供的结构校验（zod）。失败按「解析失败」重试 */
-  validate?: (raw: string) => unknown
+  validate?: (raw: string) => unknown | Promise<unknown>
 }
 
-export interface ChatResult<T = string> {
+export interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export interface LlmStats {
+  latencyMs: number
+  attempts: number
+  rateLimitWaitMs: number
+  usage?: TokenUsage
+}
+
+export interface ChatResult<T = string> extends LlmStats {
   content: T
   raw: string
   model: string
-  latencyMs: number
-  usage?: { promptTokens: number; completionTokens: number; totalTokens: number }
 }
 
 export class LlmError extends Error {
@@ -46,195 +56,210 @@ export class LlmError extends Error {
     message: string,
     readonly kind: 'config' | 'http' | 'network' | 'timeout' | 'parse' | 'aborted',
     readonly status?: number,
+    readonly stats: LlmStats = { latencyMs: 0, attempts: 0, rateLimitWaitMs: 0 },
   ) {
     super(message)
     this.name = 'LlmError'
   }
 }
 
-const DEFAULT_TIMEOUT_MS = 60_000
-const MAX_ATTEMPTS = 3 // 首次 + 2 次重试
-
-/** LLM 调用计数（诊断/额度观测用；不含任何凭证信息） */
+export const DEFAULT_TIMEOUT_MS = 60_000
+export const DEFAULT_MAX_ATTEMPTS = 3
 export const llmCounters = { calls: 0, parseFailures: 0, tokens: 0 }
+
+export function attemptLimit(value?: number): number {
+  return value !== undefined && Number.isFinite(value)
+    ? Math.max(1, Math.floor(value))
+    : DEFAULT_MAX_ATTEMPTS
+}
+
+export function attemptTimeout(value?: number): number {
+  return value !== undefined && Number.isFinite(value) ? Math.max(1, value) : DEFAULT_TIMEOUT_MS
+}
+
+export function addUsage(a?: TokenUsage, b?: TokenUsage): TokenUsage | undefined {
+  if (!a && !b) return undefined
+  return {
+    promptTokens: (a?.promptTokens ?? 0) + (b?.promptTokens ?? 0),
+    completionTokens: (a?.completionTokens ?? 0) + (b?.completionTokens ?? 0),
+    totalTokens: (a?.totalTokens ?? 0) + (b?.totalTokens ?? 0),
+  }
+}
+
+export function assertCallActive(signal: AbortSignal | undefined, deadlineAt: number): void {
+  if (signal?.aborted) throw new LlmError('llm call aborted', 'aborted')
+  if (Date.now() >= deadlineAt) throw new LlmError('llm total deadline exceeded', 'timeout')
+}
 
 function isRetryableStatus(status: number): boolean {
   return status === 408 || status === 409 || status === 429 || status >= 500
 }
 
-/** 指数退避 + 抖动；abort 时立即跳出 */
-async function sleep(ms: number, signal?: AbortSignal): Promise<void> {
-  await new Promise<void>((resolve) => {
-    if (signal?.aborted) return resolve()
-    const t = setTimeout(done, ms)
+/** Race even non-cooperative body readers/validators against cancellation. */
+function abortable<T>(operation: () => T | PromiseLike<T>, signal: AbortSignal): Promise<T> {
+  return new Promise<T>((resolve, reject) => {
     const onAbort = () => {
-      clearTimeout(t)
-      done()
+      signal.removeEventListener('abort', onAbort)
+      reject(new LlmError('llm attempt interrupted', 'aborted'))
     }
-    let finished = false
-    function done() {
-      if (finished) return
-      finished = true
+    if (signal.aborted) return onAbort()
+    signal.addEventListener('abort', onAbort, { once: true })
+    Promise.resolve().then(() => {
+      if (signal.aborted) throw new LlmError('llm attempt interrupted', 'aborted')
+      return operation()
+    }).then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort))
+  })
+}
+
+async function backoff(attempt: number, deadlineAt: number, signal?: AbortSignal): Promise<void> {
+  assertCallActive(signal, deadlineAt)
+  const waitMs = Math.min(500 * 2 ** (attempt - 1) + Math.floor(Math.random() * 250), deadlineAt - Date.now())
+  await new Promise<void>((resolve, reject) => {
+    const onAbort = () => {
+      clearTimeout(timer)
+      signal?.removeEventListener('abort', onAbort)
+      reject(new LlmError('llm call aborted', 'aborted'))
+    }
+    const timer = setTimeout(() => {
       signal?.removeEventListener('abort', onAbort)
       resolve()
-    }
+    }, Math.min(waitMs, 2_147_483_647))
     signal?.addEventListener('abort', onAbort, { once: true })
+    if (signal?.aborted) onAbort()
   })
+  assertCallActive(signal, deadlineAt)
 }
 
 interface ChoicePayload {
   choices?: Array<{ message?: { content?: unknown }; text?: unknown }>
-  usage?: {
-    prompt_tokens?: number
-    completion_tokens?: number
-    total_tokens?: number
+  usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
+}
+
+function tokenCount(value: unknown): number {
+  return typeof value === 'number' && Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+function readUsage(payload: ChoicePayload): TokenUsage | undefined {
+  if (!payload.usage || typeof payload.usage !== 'object') return undefined
+  const promptTokens = tokenCount(payload.usage.prompt_tokens)
+  const completionTokens = tokenCount(payload.usage.completion_tokens)
+  return {
+    promptTokens,
+    completionTokens,
+    totalTokens: payload.usage.total_tokens === undefined
+      ? promptTokens + completionTokens : tokenCount(payload.usage.total_tokens),
   }
 }
 
-/**
- * 单次 /chat/completions 调用。
- * 成功返回解析后的 content；失败抛 LlmError。
- */
 export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>> {
-  if (!req.apiKey) throw new LlmError('provider api key not configured', 'config')
-  if (!req.baseUrl) throw new LlmError('provider baseUrl missing', 'config')
-
-  const timeoutMs = req.timeoutMs ?? DEFAULT_TIMEOUT_MS
-  const endpoint = `${req.baseUrl.replace(/\/+$/, '')}/chat/completions`
-
-  let lastErr: LlmError | null = null
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    if (req.signal?.aborted) throw new LlmError('aborted', 'aborted')
-
-    // 全局令牌桶：管线共享，防打爆
-    await llmBucket.take(1)
-    llmCounters.calls++
-
-    const controller = new AbortController()
-    const onOuterAbort = () => controller.abort()
-    req.signal?.addEventListener('abort', onOuterAbort, { once: true })
-    // 标记本次 abort 是「我们自己的超时」还是「外部取消」—— 两者语义不同：
-    // 超时可重试，外部取消必须立即上抛
-    let timedOut = false
-    const timer = setTimeout(() => {
-      timedOut = true
-      controller.abort()
-    }, timeoutMs)
-
-    const started = performance.now()
-    try {
-      const body: Record<string, unknown> = {
-        model: req.model,
-        messages: req.messages,
-      }
-      if (req.jsonMode) body.response_format = { type: 'json_object' }
-      if (typeof req.temperature === 'number') body.temperature = req.temperature
-      if (typeof req.maxTokens === 'number') body.max_tokens = req.maxTokens
-
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          Authorization: `Bearer ${req.apiKey}`,
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-
-      const latencyMs = Math.round(performance.now() - started)
-
-      if (!res.ok) {
-        const detail = (await safeText(res)).slice(0, 200)
-        const err = new LlmError(
-          `llm http ${res.status}${detail ? `: ${detail}` : ''}`,
-          'http',
-          res.status,
-        )
-        if (!isRetryableStatus(res.status)) throw err
-        lastErr = err
-        await backoff(attempt, req.signal)
-        continue
-      }
-
-      const payload = (await res.json()) as ChoicePayload
-      const raw = extractContent(payload)
-      if (raw === null) {
-        lastErr = new LlmError('llm response has no content', 'parse')
-        await backoff(attempt, req.signal)
-        continue
-      }
-
-      let content: unknown = raw
-      if (req.validate) {
-        try {
-          content = req.validate(raw)
-        } catch (e) {
-          llmCounters.parseFailures++
-          lastErr = new LlmError(
-            `llm output failed validation: ${e instanceof Error ? e.message : String(e)}`,
-            'parse',
-          )
-          await backoff(attempt, req.signal)
-          continue
-        }
-      }
-
-      const usage = payload.usage
-        ? {
-            promptTokens: payload.usage.prompt_tokens ?? 0,
-            completionTokens: payload.usage.completion_tokens ?? 0,
-            totalTokens:
-              payload.usage.total_tokens ??
-              (payload.usage.prompt_tokens ?? 0) + (payload.usage.completion_tokens ?? 0),
-          }
-        : undefined
-      if (usage) llmCounters.tokens += usage.totalTokens
-
-      return {
-        content: content as T,
-        raw,
-        model: req.model,
-        latencyMs,
-        usage,
-      }
-    } catch (e) {
-      if (e instanceof LlmError) {
-        if (e.kind === 'http' || e.kind === 'config') throw e
-        lastErr = e
-      } else if (isAbortError(e)) {
-        if (req.signal?.aborted && !timedOut) {
-          // 外部 abort（job 超时 / 取消）不属于可重试失败，直接上抛
-          throw new LlmError('aborted', 'aborted')
-        }
-        // 自己的超时：按可重试的 timeout 处理
-        lastErr = new LlmError(`llm timeout after ${timeoutMs}ms`, 'timeout')
-      } else {
-        lastErr = new LlmError(`llm network error: ${String(e).slice(0, 200)}`, 'network')
-      }
-      await backoff(attempt, req.signal)
-    } finally {
-      clearTimeout(timer)
-      req.signal?.removeEventListener('abort', onOuterAbort)
-    }
-  }
-
-  log.warn('llm.exhausted', { model: req.model, attempts: MAX_ATTEMPTS })
-  throw lastErr ?? new LlmError('llm call failed', 'network')
-}
-
-function backoff(attempt: number, signal?: AbortSignal): Promise<void> {
-  if (attempt >= MAX_ATTEMPTS) return Promise.resolve()
-  const base = 500 * 2 ** (attempt - 1)
-  const jitter = Math.floor(Math.random() * 250)
-  return sleep(base + jitter, signal)
-}
-
-async function safeText(res: Response): Promise<string> {
+  const started = performance.now()
+  const maxAttempts = attemptLimit(req.maxAttempts)
+  const timeoutMs = attemptTimeout(req.timeoutMs)
+  const deadlineAt = req.deadlineAt ?? Date.now() + timeoutMs * maxAttempts
+  let attempts = 0
+  let rateLimitWaitMs = 0
+  let usage: TokenUsage | undefined
+  const stats = (): LlmStats => ({ latencyMs: Math.round(performance.now() - started), attempts, rateLimitWaitMs, usage })
   try {
-    return await res.text()
-  } catch {
-    return ''
+    assertCallActive(req.signal, deadlineAt)
+    if (!Number.isFinite(deadlineAt)) throw new LlmError('llm deadline must be finite', 'config')
+    if (!req.apiKey) throw new LlmError('provider api key not configured', 'config')
+    if (!req.baseUrl) throw new LlmError('provider baseUrl missing', 'config')
+    const endpoint = `${req.baseUrl.replace(/\/+$/, '')}/chat/completions`
+    let lastErr = new LlmError('llm call failed', 'network')
+
+    while (attempts < maxAttempts) {
+      assertCallActive(req.signal, deadlineAt)
+      const waitStarted = performance.now()
+      try {
+        await llmBucket.take(1, { signal: req.signal, deadlineAt })
+      } catch (e) {
+        if (e instanceof TokenWaitError) throw new LlmError(e.message, e.kind)
+        throw e
+      } finally {
+        rateLimitWaitMs += Math.round(performance.now() - waitStarted)
+      }
+      assertCallActive(req.signal, deadlineAt)
+      const controller = new AbortController()
+      const onOuterAbort = () => controller.abort()
+      req.signal?.addEventListener('abort', onOuterAbort, { once: true })
+      let timedOut = false
+      const attemptDeadlineAt = Math.min(deadlineAt, Date.now() + timeoutMs)
+      const timer = setTimeout(() => { timedOut = true; controller.abort() },
+        Math.min(attemptDeadlineAt - Date.now(), 2_147_483_647))
+      if (req.signal?.aborted) controller.abort()
+      try {
+        const body: Record<string, unknown> = { model: req.model, messages: req.messages }
+        if (req.jsonMode) body.response_format = { type: 'json_object' }
+        if (typeof req.temperature === 'number') body.temperature = req.temperature
+        if (typeof req.maxTokens === 'number') body.max_tokens = req.maxTokens
+        const encodedBody = JSON.stringify(body)
+        const res = await abortable(() => {
+          assertCallActive(req.signal, attemptDeadlineAt)
+          attempts++
+          llmCounters.calls++
+          return fetch(endpoint, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${req.apiKey}` },
+            body: encodedBody,
+            signal: controller.signal,
+          })
+        }, controller.signal)
+        if (!res.ok) {
+          // Do not read or retain upstream error bodies: they can contain credentials.
+          void res.body?.cancel().catch(() => {})
+          throw new LlmError(`llm http ${res.status}`, 'http', res.status)
+        }
+        let payload: ChoicePayload
+        try {
+          payload = await abortable(() => res.json(), controller.signal) as ChoicePayload
+        } catch (e) {
+          if (controller.signal.aborted) throw e
+          throw new LlmError('llm response is not valid JSON', 'parse')
+        }
+        if (!payload || typeof payload !== 'object') throw new LlmError('llm response is not an object', 'parse')
+        // Count usage before validation: malformed model content was still billed.
+        const billed = readUsage(payload)
+        usage = addUsage(usage, billed)
+        if (billed) llmCounters.tokens += billed.totalTokens
+        assertCallActive(req.signal, attemptDeadlineAt)
+        const raw = extractContent(payload)
+        if (raw === null) throw new LlmError('llm response has no content', 'parse')
+        let content: unknown = raw
+        if (req.validate) {
+          try {
+            content = await abortable(() => req.validate!(raw), controller.signal)
+          } catch (e) {
+            if (controller.signal.aborted) throw e
+            throw new LlmError('llm output failed validation', 'parse')
+          }
+        }
+        assertCallActive(req.signal, deadlineAt)
+        if (controller.signal.aborted || timedOut || Date.now() >= attemptDeadlineAt) throw new LlmError('llm attempt timed out', 'timeout')
+        return { content: content as T, raw, model: req.model, ...stats() }
+      } catch (e) {
+        assertCallActive(req.signal, deadlineAt)
+        lastErr = timedOut || Date.now() >= attemptDeadlineAt ? new LlmError('llm attempt timed out', 'timeout')
+          : e instanceof LlmError ? e : new LlmError('llm network request failed', 'network')
+        if (lastErr.kind === 'parse') llmCounters.parseFailures++
+        if (lastErr.kind === 'aborted' || lastErr.kind === 'config' ||
+          (lastErr.kind === 'http' && !isRetryableStatus(lastErr.status ?? 0))) throw lastErr
+      } finally {
+        clearTimeout(timer)
+        // Also release transport/body work after synchronous validation overruns
+        // its deadline (the timer could not run while JavaScript was blocked).
+        controller.abort()
+        req.signal?.removeEventListener('abort', onOuterAbort)
+      }
+      if (attempts < maxAttempts) await backoff(attempts, deadlineAt, req.signal)
+    }
+    throw lastErr
+  } catch (e) {
+    const error = e instanceof LlmError ? e : new LlmError('llm request failed', 'network')
+    const cumulative = stats()
+    log.warn('llm.exhausted', { ...req.context, model: req.model, kind: error.kind, ...cumulative,
+      tokens: cumulative.usage?.totalTokens ?? 0 })
+    throw new LlmError(error.message, error.kind, error.status, cumulative)
   }
 }
 
@@ -242,30 +267,19 @@ function extractContent(p: ChoicePayload): string | null {
   const c = p.choices?.[0]
   const content = c?.message?.content
   if (typeof content === 'string') return content
-  // 极少数兼容层返回数组形式
   if (Array.isArray(content)) {
-    const joined = content
-      .map((part) => (typeof part === 'string' ? part : (part as { text?: string })?.text ?? ''))
-      .join('')
+    const joined = content.map((part) => typeof part === 'string' ? part
+      : typeof part?.text === 'string' ? part.text : '').join('')
     return joined || null
   }
-  if (typeof c?.text === 'string') return c.text
-  return null
+  return typeof c?.text === 'string' ? c.text : null
 }
 
-function isAbortError(e: unknown): boolean {
-  return (
-    e instanceof DOMException ||
-    (typeof e === 'object' && e !== null && (e as { name?: string }).name === 'AbortError')
-  )
-}
-
-/** 模型偶尔会用 ```json 围栏，剥掉再 parse（agents/llm callJson 与 llm/expand 共用） */
+/** Strip occasional Markdown JSON fences. */
 export function parseJsonLoose(raw: string): unknown {
   const trimmed = raw.trim()
   const fenced = /^```(?:json)?\s*([\s\S]*?)\s*```$/.exec(trimmed)
   const body = fenced?.[1] ?? trimmed
   const start = body.search(/[[{]/)
-  const json = start > 0 ? body.slice(start) : body
-  return JSON.parse(json)
+  return JSON.parse(start > 0 ? body.slice(start) : body)
 }

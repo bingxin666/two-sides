@@ -14,7 +14,7 @@
  *   - 全程走 ZHIHU_LIVE 闸：hotList 自带闸，闸关时 cron tick 只记日志不硬跑
  *   - 每批 hot_list 1 次额度；搜索/LLM 走既有管线，LLM_RPM_LIMIT 令牌桶全局生效，
  *     变体间 300ms 间隔（fetchAnswers 内）原样适用
- *   - 批内并发（≤4，PREGENERATE_CONCURRENCY），跑完一批再放下一批，不打爆搜索限频
+ *   - 固定 PREGENERATE_CONCURRENCY 个 worker（默认 4），完成一题立即补位，不打爆搜索限频
  *   - 单题失败 → 该题终态 failed，批次继续（docs/01 §4.1 原话：标记为失败并继续处理后续题目）
  *   - 已 ready 的题幂等跳过；INSERT 竞争失败（他处持有）不抢不重跑（§6.3 同路径）
  */
@@ -26,7 +26,7 @@ import { cacheQuestionTitle, getAnalysis, getJob, listHotQuestions, upsertHotQue
 import { isRunningHere, STALE_GRACE_MS, startRunnerAwait, tryAcquire } from './jobs'
 import { nowIso, parseIso, todayKey } from './time'
 
-/** 批内并发度：4；搜索与 LLM 各自仍受客户端限流/令牌桶约束 */
+/** 批内并发度（默认 4）；搜索与 LLM 各自仍受客户端限流/令牌桶约束 */
 const PREGENERATE_CONCURRENCY = env.PREGENERATE_CONCURRENCY
 
 /** 剥掉站点后缀（与 routes/search.ts 同口径；实测 hot_list 标题一般已无后缀，防御性保留） */
@@ -73,30 +73,32 @@ export async function runPregenerateBatch(
     elapsedMs: 0,
   }
 
-  // 小并发分批：每批 PREGENERATE_CONCURRENCY 题，批内 Promise.all，批间串行
-  for (let i = 0; i < items.length; i += PREGENERATE_CONCURRENCY) {
-    const chunk = items.slice(i, i + PREGENERATE_CONCURRENCY)
-    await Promise.all(
-      chunk.map(async (item) => {
-        // 已 ready：幂等跳过，不重跑不重复消耗额度
-        if (getAnalysis(date, item.qid)?.status === 'ready') {
-          report.skippedReady++
-          return
-        }
-        // 与 GET/POST 主端点同一条 INSERT 竞争路径：抢到才跑
-        const acq = tryAcquire(date, item.qid)
-        if (!acq.owned || !acq.job) {
-          if (getAnalysis(date, item.qid)?.status === 'failed') report.skippedFailed++
-          else report.busyElsewhere++
-          return
-        }
-        report.started++
-        // runJob 永不 reject（异常内部收敛为 failed）；跑完一个再放下一个
-        await startRunnerAwait(date, item.qid, acq.job, item.title)
-        if (getAnalysis(date, item.qid)?.status === 'failed') report.endedFailed++
-      }),
-    )
+  // 共享游标在 await 前同步领取；每个 worker 跑完当前题就取下一题，
+  // 较慢的题只占自己的槽位，不让其他空闲 worker 等待整批结束。
+  let cursor = 0
+  async function worker(): Promise<void> {
+    while (cursor < items.length) {
+      const item = items[cursor++]!
+      // 已 ready：幂等跳过，不重跑不重复消耗额度
+      if (getAnalysis(date, item.qid)?.status === 'ready') {
+        report.skippedReady++
+        continue
+      }
+      // 与 GET/POST 主端点同一条 INSERT 竞争路径：抢到才跑
+      const acq = tryAcquire(date, item.qid)
+      if (!acq.owned || !acq.job) {
+        if (getAnalysis(date, item.qid)?.status === 'failed') report.skippedFailed++
+        else report.busyElsewhere++
+        continue
+      }
+      report.started++
+      // runJob 永不 reject（异常内部收敛为 failed）；完成后立即给下一题补位。
+      await startRunnerAwait(date, item.qid, acq.job, item.title)
+      if (getAnalysis(date, item.qid)?.status === 'failed') report.endedFailed++
+    }
   }
+  const workerCount = Math.min(items.length, PREGENERATE_CONCURRENCY)
+  await Promise.all(Array.from({ length: workerCount }, () => worker()))
 
   report.elapsedMs = Date.now() - started0
   log.info('pregenerate.batch.done', { ...report })

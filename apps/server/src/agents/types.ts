@@ -91,6 +91,10 @@ export interface PipelineContext {
   titleHint?: string
   /** job 超时/取消时 abort；Agent 必须在耗时点检查它 */
   signal: AbortSignal
+  /** Absolute deadline for this job or scoped stage; includes queues and retries. */
+  deadlineAt?: number
+  /** Batch/judgment identifier for attributing concurrent calls in logs. */
+  unit?: string
   /** 上报进度（幂等，可高频调用） */
   report(p: Partial<PipelineProgress>): void
   /** 非致命事件（单批失败等）记录到 job detail，不改变终态 */

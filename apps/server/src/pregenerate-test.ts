@@ -24,7 +24,7 @@ Object.assign(process.env, {
   ZHIHU_LIVE: testCase === 'disabled' ? '0' : '1',
   ZHIHU_ACCESS_SECRET: 'test-only-not-a-real-secret',
   PIPELINE_MODE: 'fake',
-  PIPELINE_FAKE_DURATION_MS: '0',
+  PIPELINE_FAKE_DURATION_MS: testCase === 'worker-queue' ? '5' : '0',
   PREGENERATE_TOP: testCase === 'top-zero' ? '0' : '3',
   PREGENERATE_CONCURRENCY: '2',
   ANALYSIS_JOB_TIMEOUT_SEC: '1',
@@ -130,6 +130,64 @@ async function main(): Promise<void> {
     assert.deepEqual(unexpectedRequests, [])
     passed++
     console.log(`ok ${passed} - ${name}`)
+  }
+
+  if (testCase === 'worker-queue') {
+    responseQids = ['6001', '6002', '6003', '6004', '6005']
+    let releaseSlow!: () => void
+    let slowHeld = false
+    let maxRunning = 0
+    const handles: Array<ReturnType<typeof setTimeout>> = []
+    const sampleConcurrency = () => {
+      maxRunning = Math.max(maxRunning, responseQids.filter((qid) => isRunningHere(date, qid)).length)
+    }
+    globalThis.setTimeout = ((callback: (...args: unknown[]) => void, delay = 0, ...args: unknown[]) => {
+      // runJob registers its timeout after recording ownership, so this observes
+      // every runner start as well as the fake agent's subsequent steps.
+      sampleConcurrency()
+      // A five-step fake pipeline has 1ms agent timers; all longer timers are
+      // job/phase deadlines. Hold a fake step explicitly, not whichever timer
+      // a future orchestration layer happens to register first.
+      const fakeStep = delay === 1
+      const holdFirstStep = fakeStep && !slowHeld
+      if (holdFirstStep) {
+        slowHeld = true
+        releaseSlow = () => callback(...args)
+      }
+      const handle = !fakeStep || holdFirstStep
+        ? nativeSetTimeout(() => {}, 2_147_483_647)
+        : nativeSetTimeout(() => { sampleConcurrency(); callback(...args) }, delay)
+      handle.unref()
+      handles.push(handle)
+      return handle
+    }) as typeof setTimeout
+    const batch = pregenerate(responseQids.length, { reuseStored: true })
+    let settled = false
+    void batch.then(() => { settled = true })
+    try {
+      // The first runner stays suspended. Every later candidate must still finish
+      // through the second worker; the previous chunk barrier cannot do this.
+      await eventually(() => repo.getAnalysis(date, '6005')?.status === 'ready')
+      assert.equal(slowHeld, true)
+      assert.equal(repo.getAnalysis(date, '6001')?.status, 'generating')
+      assert.equal(settled, false)
+      assert.equal(maxRunning, env.PREGENERATE_CONCURRENCY)
+      for (const qid of responseQids.slice(1)) assert.equal(repo.getAnalysis(date, qid)?.status, 'ready')
+    } finally {
+      globalThis.setTimeout = nativeSetTimeout
+      releaseSlow?.()
+      await batch
+      for (const handle of handles) clearTimeout(handle)
+    }
+    const report = await batch
+    assert.equal(report.started, 5)
+    assert.equal(report.endedFailed, 0)
+    assert.equal(repo.listReadyHot(date).length, 5)
+    assert.equal(fetchCount, 1)
+    assert.deepEqual(unexpectedRequests, [])
+    for (const qid of responseQids) assert.equal(repo.getAnalysis(date, qid)?.attempts, 1)
+    console.log('ok - worker-queue: free workers refill before slow work ends and respect concurrency')
+    return
   }
 
   if (testCase === 'index-nonblocking') {
@@ -293,7 +351,7 @@ async function main(): Promise<void> {
     }
   })
 
-  for (const childCase of ['disabled', 'top-zero', 'index-nonblocking']) {
+  for (const childCase of ['disabled', 'top-zero', 'index-nonblocking', 'worker-queue']) {
     const child = Bun.spawn([process.execPath, import.meta.path, '--case', childCase], {
       cwd: testDir, env: process.env, stdout: 'pipe', stderr: 'pipe',
     })

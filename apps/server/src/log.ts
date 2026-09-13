@@ -24,7 +24,7 @@ function emit(level: Level, msg: string, fields?: Record<string, unknown>): void
     for (const [k, v] of Object.entries(fields)) {
       if (v === undefined) continue
       // 哪怕调用方误传，也不能把可能的凭证字段写出去
-      line[k] = isSecretKey(k) ? '[redacted]' : v
+      line[k] = sanitizeField(k, v, new WeakSet())
     }
   }
   const out = JSON.stringify(line)
@@ -38,6 +38,26 @@ const SECRET_KEY_RE =
 
 function isSecretKey(key: string): boolean {
   return SECRET_KEY_RE.test(key)
+}
+
+// Exact metric names and finite numbers only. A string named "tokens" can be
+// an actual credential and must keep the same redaction as every other secret.
+const TOKEN_METRIC_KEYS = new Set([
+  'tokens', 'promptTokens', 'completionTokens', 'totalTokens',
+  'prompt_tokens', 'completion_tokens', 'total_tokens',
+])
+
+function sanitizeField(key: string, value: unknown, seen: WeakSet<object>): unknown {
+  if (isSecretKey(key) && !(TOKEN_METRIC_KEYS.has(key) &&
+    typeof value === 'number' && Number.isFinite(value) && value >= 0)) return '[redacted]'
+  if (value === null || typeof value !== 'object') return value
+  if (seen.has(value)) return '[circular]'
+  seen.add(value)
+  const out = Array.isArray(value)
+    ? value.map((entry) => sanitizeField('', entry, seen))
+    : Object.fromEntries(Object.entries(value).map(([k, v]) => [k, sanitizeField(k, v, seen)]))
+  seen.delete(value)
+  return out
 }
 
 export const log = {

@@ -7,6 +7,19 @@
 
 import { env } from './env'
 
+export interface TokenWaitOptions {
+  signal?: AbortSignal
+  /** Absolute Date.now() deadline, including time spent waiting for capacity. */
+  deadlineAt?: number
+}
+
+export class TokenWaitError extends Error {
+  constructor(readonly kind: 'aborted' | 'timeout') {
+    super(kind === 'aborted' ? 'token wait aborted' : 'token wait deadline exceeded')
+    this.name = 'TokenWaitError'
+  }
+}
+
 export class TokenBucket {
   private tokens: number
   private lastRefill: number
@@ -43,9 +56,13 @@ export class TokenBucket {
   }
 
   /** 等到取到 token 为止；返回实际等待毫秒 */
-  async take(cost = 1): Promise<number> {
+  async take(cost = 1, options: TokenWaitOptions = {}): Promise<number> {
     const start = Date.now()
     for (;;) {
+      if (options.signal?.aborted) throw new TokenWaitError('aborted')
+      if (options.deadlineAt !== undefined && Date.now() >= options.deadlineAt) {
+        throw new TokenWaitError('timeout')
+      }
       this.refill()
       if (this.tokens >= cost) {
         this.tokens -= cost
@@ -53,7 +70,20 @@ export class TokenBucket {
       }
       const deficit = cost - this.tokens
       const waitMs = Math.max(10, Math.ceil((deficit / this.refillPerSec) * 1000))
-      await new Promise<void>((r) => setTimeout(r, waitMs))
+      const remaining = options.deadlineAt === undefined ? Infinity : options.deadlineAt - Date.now()
+      await new Promise<void>((resolve, reject) => {
+        const onAbort = () => {
+          clearTimeout(timer)
+          options.signal?.removeEventListener('abort', onAbort)
+          reject(new TokenWaitError('aborted'))
+        }
+        const timer = setTimeout(() => {
+          options.signal?.removeEventListener('abort', onAbort)
+          resolve()
+        }, Math.min(waitMs, remaining, 2_147_483_647))
+        options.signal?.addEventListener('abort', onAbort, { once: true })
+        if (options.signal?.aborted) onAbort()
+      })
     }
   }
 
