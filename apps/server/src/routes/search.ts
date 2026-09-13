@@ -82,29 +82,32 @@ searchRoutes.get('/search', async (c) => {
     // 与管线 fetchAnswers 同一 expandQueries —— 用户输入流与预生成/懒生成同路径
     const queries = await expandQueries(q, { timeoutMs: 3_000 })
 
-    // 多查询执行：单查询失败不阻塞其余（≥1 个成功即可），条目按 ContentID/Url 去重
+    // 多查询执行：所有扩写问法同时发起，单查询失败不阻塞其余（≥1 个成功即可），
+    // 条目按 ContentID/Url 去重。搜索是独立 I/O，并发等待可显著缩短首屏延迟。
     const seen = new Set<string>()
     const merged: ZhihuItem[] = []
     let lastError: unknown = null
     let okCount = 0
-    for (const v of queries) {
-      try {
+    const results = await Promise.allSettled(queries.map((v) => search(v, 10)))
+    results.forEach((result, i) => {
+      const v = queries[i]!
+      if (result.status === 'fulfilled') {
         // Count 上限 10：每查询一页，合并后足够挑出 ≤8 道去重后的题
-        for (const it of await search(v, 10)) {
+        for (const it of result.value) {
           const k = (it.ContentID ?? '').trim() || (it.Url ?? '').trim()
           if (!k || seen.has(k)) continue
           seen.add(k)
           merged.push(it)
         }
         okCount++
-      } catch (e) {
-        lastError = e
+      } else {
+        lastError = result.reason
         log.warn('search.query.failed', {
           query: v.slice(0, 80),
-          reason: e instanceof Error ? e.message.slice(0, 120) : String(e).slice(0, 120),
+          reason: result.reason instanceof Error ? result.reason.message.slice(0, 120) : String(result.reason).slice(0, 120),
         })
       }
-    }
+    })
     if (okCount === 0) throw lastError ?? new ZhihuError('all search queries failed', 'zhihu_error', true)
 
     const byQuestion = new Map<string, string>()

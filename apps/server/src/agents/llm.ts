@@ -297,7 +297,7 @@ function toRawAnswer(it: ZhihuItem): RawAnswer | null {
 
 export async function searchDedup(variants: string[], ctx: PipelineContext): Promise<ZhihuItem[]> {
   const seen = new Map<string, ZhihuItem>()
-  // 搜索是独立 I/O：最多两个并发 worker，避免四个变体的波次串行等待。
+  // 搜索是独立 I/O：扩写得到的所有变体同时发起（通常为原句 + 3 个问法）。
   // 不再人为插入 300ms 间隔；知乎限流由请求层/全局令牌桶负责。
   let next = 0
   let lastError: unknown
@@ -333,7 +333,8 @@ export async function searchDedup(variants: string[], ctx: PipelineContext): Pro
       }
     }
   }
-  const workerCount = Math.min(2, variants.length)
+  // 每个变体一个 worker，确保不会因为前一个搜索慢而阻塞后续查询。
+  const workerCount = variants.length
   await Promise.all(Array.from({ length: workerCount }, () => worker()))
   if (seen.size === 0 && successCount === 0 && lastError !== undefined) throw lastError
   return [...seen.values()]
