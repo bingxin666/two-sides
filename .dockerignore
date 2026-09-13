@@ -29,6 +29,10 @@
 *.sqlite
 *.sqlite3
 
+# GHCR server build uses the prebuilt self-contained artifact from the root context.
+!apps/server/dist/
+!apps/server/dist/**
+
 # 日志
 *.log
 logs

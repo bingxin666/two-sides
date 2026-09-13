@@ -10,11 +10,8 @@
 #   · 变量值由 compose 从项目根目录的 .env 自动插值（.env 已在 .gitignore 中）
 #   · 未设置即启动会直接报错退出，避免"跑起来了但鉴权全挂"的静默失败
 #
-# 前置：
-#   1. cp .env.example .env 并填入真实值
-#   2. pnpm install
-#   3. pnpm -F @two-sides/web build     （产出 apps/web/dist，web 卷挂载用）
-#   4. pnpm -F @two-sides/server build  （产出 apps/server/dist/index.js，server 镜像 COPY 用）
+# 前置：复制一份 .env 并填入真实凭证；镜像由 GHCR 提供，不需要拉取代码仓库或本地构建。
+# 可通过 GHCR_OWNER / IMAGE_TAG 覆盖镜像仓库与版本，默认使用 bingxin666 的 master 镜像。
 # ============================================================
 
 services:
@@ -23,17 +20,13 @@ services:
   # 对外 HTTPS 由你自行部署的反代终止，指向 127.0.0.1:8080 即可
   # ----------------------------------------------------------
   web:
-    image: caddy:2-alpine
+    image: ghcr.io/${GHCR_OWNER:-bingxin666}/two-sides-web:${IMAGE_TAG:-master}
+    pull_policy: always
     container_name: two-sides-web
     restart: unless-stopped
     # 只绑回环，公网入口交给宿主反代
     ports:
       - "127.0.0.1:8080:8080"
-    volumes:
-      # Vue 构建产物（只读）
-      - ./apps/web/dist:/srv:ro
-      # 站点配置：:8080 站点块 + file_server + /api/* → server:3000
-      - ./Caddyfile:/etc/caddy/Caddyfile:ro
     depends_on:
       # 用 started 而非 service_healthy：避免镜像内缺 curl 导致
       # healthcheck 失败时把 web 一起拖住（Caddy 自带重试）
@@ -52,9 +45,8 @@ services:
   # 端点未实现前，快照由懒生成路径（GET /analysis 未命中隐式触发）自然填充。
   # ----------------------------------------------------------
   server:
-    build:
-      context: ./apps/server
-      dockerfile: Dockerfile
+    image: ghcr.io/${GHCR_OWNER:-bingxin666}/two-sides-server:${IMAGE_TAG:-master}
+    pull_policy: always
     container_name: two-sides-server
     restart: unless-stopped
     # 不对外暴露端口，只经 Caddy 的 /api/* 进入
@@ -102,8 +94,6 @@ services:
     volumes:
       # 按日分析快照（hot_questions / analyses / jobs）——具名 volume，持久化
       - server-data:/app/data
-      # 服务商与 Agent 绑定配置（只含 env 变量名，无密钥）
-      - ./config/providers.yaml:/app/config/providers.yaml:ro
     healthcheck:
       # 知乎额度查询本身不消耗业务额度，可安全用于探活
       test: ["CMD", "curl", "-fsS", "http://localhost:3000/api/v1/health"]

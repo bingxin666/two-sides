@@ -194,12 +194,14 @@ pnpm build      # 全 workspace 构建
 
 ```bash
 cp .env.example .env          # 填入真实值
-pnpm install
-# 前端构建期变量：产品线上为 live 模式（mock 仅为离线应急）
-VITE_API_MODE=live VITE_API_BASE=/api/v1 pnpm -F @two-sides/web build   # 产出 apps/web/dist（Caddy 挂载）
-pnpm -F @two-sides/server build # 产出 apps/server/dist/index.js（server 镜像 COPY）
-docker compose up -d --build
+# Compose 直接拉取 GHCR 镜像，不需要拉取 Git 仓库或本地安装 Node/Bun
+docker compose pull
+docker compose up -d
 ```
+
+默认镜像为 `ghcr.io/bingxin666/two-sides-web:master` 与
+`ghcr.io/bingxin666/two-sides-server:master`。需要固定版本或使用自己的镜像仓库时，设置
+`IMAGE_TAG` 和 `GHCR_OWNER` 后再执行上述命令。
 
 - `web` 监听 `127.0.0.1:8080`，Caddy 托管静态产物并反代 `/api/*` → `server:3000`
 - `server` 不对外暴露端口；SQLite 落在具名卷 `two-sides-server-data`

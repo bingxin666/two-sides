@@ -1,7 +1,7 @@
 # ============================================================
 # 两面 · server 镜像
 #
-# 构建上下文 = ./apps/server（见 docker-compose.yml 的 build.context，勿改路径）
+# 构建上下文 = 仓库根目录（由 GHCR workflow 统一构建）
 #
 # 为什么不在镜像里 bun install：
 #   @two-sides/contract 是 pnpm workspace 依赖（../../packages/contract），
@@ -13,8 +13,7 @@
 # 运行时挂载（与 docker-compose.yml 严格对齐，改动需同步 compose）：
 #   named volume server-data      -> /app/data
 #                                  （ZHIDUAN_DB_PATH=/app/data/two-sides.db，见 compose）
-#   ./config/providers.yaml (ro)  -> /app/config/providers.yaml
-#                                  （PROVIDERS_CONFIG，见 compose；文件里只有 env 变量名，无密钥）
+#   /app/config/providers.yaml     （镜像内置，文件里只有 env 变量名，无密钥）
 # ============================================================
 
 FROM oven/bun:1
@@ -33,7 +32,8 @@ RUN apt-get update \
 
 # 只拷产物：镜像里没有源码、没有 node_modules、更没有任何密钥
 # （若 dist/index.js 不存在，COPY 会直接失败 —— 先在宿主机跑 pnpm -F @two-sides/server build）
-COPY dist/index.js ./index.js
+COPY apps/server/dist/index.js ./index.js
+COPY config/providers.yaml ./config/providers.yaml
 
 EXPOSE 3000
 
