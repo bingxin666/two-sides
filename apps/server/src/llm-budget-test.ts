@@ -252,7 +252,7 @@ try {
     assert.equal(entry.nested.values[0].tokens, '[redacted]')
     assert(!captured.join('\n').includes(credential))
     assert(!captured.join('\n').includes('sensitive-raw-content'))
-    const callLog = captured.map((line) => JSON.parse(line)).find((line) => line.msg === 'llm.call.ok')
+    const callLog = captured.map((line) => JSON.parse(line)).find((line) => line.msg === 'llm.call.ok' && line.qid === '42' && line.attempts === 3)
     assert.equal(callLog.qid, '42')
     assert.equal(callLog.attempts, 3)
     assert.equal(callLog.tokens, 21)
