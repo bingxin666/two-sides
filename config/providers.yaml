@@ -17,7 +17,7 @@ providers:
   - name: origami
     baseUrl: https://ai.origami.pub/v1
     apiKeyEnv: ORIGAMI_API_KEY
-    models: [deepseek-v4-flash, gemini-2.5-flash]
+    models: [deepseek-v4-flash, gemini-2.5-flash, gemini-3.6-flash]
 
   - name: deepseek
     baseUrl: https://api.deepseek.com/v1
@@ -37,7 +37,7 @@ providers:
 agents:
   extract:
     provider: origami
-    model: deepseek-v4-flash
+    model: gemini-3.6-flash
     fallback: { provider: deepseek, model: deepseek-chat }
   merge:
     provider: origami
@@ -45,7 +45,7 @@ agents:
     fallback: { provider: deepseek, model: deepseek-reasoner }
   orient:
     provider: origami
-    model: deepseek-v4-flash
+    model: gemini-3.6-flash
     fallback: { provider: deepseek, model: deepseek-chat }
   # 查询语义扩写器（Origami / Gemini 2.5 Flash）：给争议问题
   # 扩写 ≤3 个「知乎用户可能提问这道题的相似问法」。3s 超时硬上限，失败退回原句。
@@ -58,7 +58,7 @@ agents:
   # 与主问题构成「同一场讨论」。宁缺毋滥，解析失败即跳过 Tier 2（优雅降级）。
   rescue:
     provider: origami
-    model: deepseek-v4-flash
+    model: gemini-3.6-flash
     fallback: { provider: deepseek, model: deepseek-chat }
 
   # 综述（刘看山人格解读，2026-09-12 起由外部 LLM 承载，不再走知乎直答 ——
