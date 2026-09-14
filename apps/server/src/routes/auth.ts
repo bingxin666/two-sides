@@ -18,7 +18,10 @@ const SESSION_COOKIE = 'two_sides_zhihu_session'
 const STATE_COOKIE = 'two_sides_zhihu_state'
 const SESSION_TTL_SEC = 60 * 60
 const STATE_TTL_MS = 10 * 60 * 1000
-const TOKEN_EXCHANGE_TIMEOUT_MS = 15_000
+// The public edge proxy gives an upstream request roughly ten seconds. Keep
+// this deadline shorter so a blocked Zhihu connection becomes our safe OAuth
+// error redirect instead of an edge-generated 502/EOF.
+const TOKEN_EXCHANGE_TIMEOUT_MS = 8_000
 
 type Session = { accessToken: string; expiresAt: number }
 

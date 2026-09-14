@@ -209,7 +209,7 @@ async function main(): Promise<void> {
   }
 
   for (const phase of ['headers', 'body'] as const) {
-    await check(`15-second deadline covers token response ${phase}`, async () => {
+    await check(`8-second deadline covers token response ${phase}`, async () => {
       const login = await authorize()
       const requestedDeadlines: number[] = []
       AbortSignal.timeout = (milliseconds: number) => {
@@ -238,7 +238,7 @@ async function main(): Promise<void> {
           }),
         ])
         await redirected(response, false)
-        assert.deepEqual(requestedDeadlines, [15_000])
+        assert.deepEqual(requestedDeadlines, [8_000])
         assert.equal(exchanges.length, 1)
       } finally {
         if (guard) clearTimeout(guard)
