@@ -18,10 +18,11 @@ const SESSION_COOKIE = 'two_sides_zhihu_session'
 const STATE_COOKIE = 'two_sides_zhihu_state'
 const SESSION_TTL_SEC = 60 * 60
 const STATE_TTL_MS = 10 * 60 * 1000
-// The public edge proxy gives an upstream request roughly ten seconds. Keep
-// this deadline shorter so a blocked Zhihu connection becomes our safe OAuth
-// error redirect instead of an edge-generated 502/EOF.
-const TOKEN_EXCHANGE_TIMEOUT_MS = 8_000
+// The public edge proxy gives an upstream request roughly ten seconds. Use a
+// short per-attempt deadline with bounded retries so a transiently bad Zhihu
+// edge can recover without letting the outer proxy emit a 502/EOF.
+const TOKEN_EXCHANGE_ATTEMPTS = 3
+const TOKEN_EXCHANGE_TIMEOUT_MS = 2_500
 
 type Session = { accessToken: string; expiresAt: number }
 
@@ -92,31 +93,39 @@ export async function handleZhihuCallback(c: Context): Promise<Response> {
   const code = url.searchParams.get('authorization_code') || url.searchParams.get('code')
   if (!code || !configured()) return callbackRedirect(c, false)
 
+  const body = new URLSearchParams({
+    app_id: env.ZHIHU_OAUTH_APP_ID,
+    app_key: env.ZHIHU_OAUTH_APP_KEY,
+    grant_type: 'authorization_code',
+    redirect_uri: env.ZHIHU_OAUTH_REDIRECT_URI,
+    code,
+  })
   let payload: unknown
-  try {
-    const body = new URLSearchParams({
-      app_id: env.ZHIHU_OAUTH_APP_ID,
-      app_key: env.ZHIHU_OAUTH_APP_KEY,
-      grant_type: 'authorization_code',
-      redirect_uri: env.ZHIHU_OAUTH_REDIRECT_URI,
-      code,
-    })
-    const response = await fetch('https://openapi.zhihu.com/access_token', {
-      method: 'POST',
-      headers: { 'content-type': 'application/x-www-form-urlencoded' },
-      body,
-      signal: AbortSignal.timeout(TOKEN_EXCHANGE_TIMEOUT_MS),
-    })
-    if (!response.ok) {
-      log.warn('oauth.token_exchange_rejected', { status: response.status })
-      return callbackRedirect(c, false)
+  let exchanged = false
+  for (let attempt = 1; attempt <= TOKEN_EXCHANGE_ATTEMPTS; attempt++) {
+    try {
+      const response = await fetch('https://openapi.zhihu.com/access_token', {
+        method: 'POST',
+        headers: { 'content-type': 'application/x-www-form-urlencoded' },
+        body,
+        signal: AbortSignal.timeout(TOKEN_EXCHANGE_TIMEOUT_MS),
+      })
+      if (!response.ok) {
+        log.warn('oauth.token_exchange_rejected', { status: response.status, attempt })
+        if (response.status < 500 || attempt === TOKEN_EXCHANGE_ATTEMPTS) return callbackRedirect(c, false)
+      } else {
+        payload = await response.json()
+        exchanged = true
+        break
+      }
+    } catch {
+      // Upstream error messages/bodies can contain credentials; log no raw data.
+      log.warn('oauth.token_exchange_failed', { attempt })
+      if (attempt === TOKEN_EXCHANGE_ATTEMPTS) return callbackRedirect(c, false)
     }
-    payload = await response.json()
-  } catch {
-    // Upstream error messages/bodies can contain credentials; log no raw data.
-    log.warn('oauth.token_exchange_failed')
-    return callbackRedirect(c, false)
+    await new Promise((resolve) => setTimeout(resolve, 150 * attempt))
   }
+  if (!exchanged) return callbackRedirect(c, false)
 
   const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
   const accessToken = typeof record.access_token === 'string' ? record.access_token : ''
