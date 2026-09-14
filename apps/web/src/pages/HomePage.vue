@@ -12,6 +12,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import type { HotItem } from '@two-sides/contract'
 import { getHot, goZhihuAuthorize } from '@/api'
+import { ApiError } from '@/api/http'
 import { useUserStore } from '@/stores/user'
 import VeilGlass from '@/components/veil/VeilGlass.vue'
 import HotGrid from '@/components/home/HotGrid.vue'
@@ -23,7 +24,42 @@ const user = useUserStore()
 
 const items = ref<HotItem[]>([])
 const hotFailed = ref(false)
+const hotLoading = ref(true)
 const busy = ref(false)
+let hotRetryTimer: ReturnType<typeof setTimeout> | undefined
+let hotRequestInFlight = false
+let disposed = false
+const hotAbort = new AbortController()
+const hotEmptyMessage = computed(() => {
+  if (hotLoading.value && !hotFailed.value) return '正在读取今日知乎热榜…'
+  if (hotFailed.value) return '热榜暂时未能连接，正在自动重试…'
+  return '今日热榜分析尚未生成，准备好后将自动显示'
+})
+
+/**
+ * 热榜由服务端每日后台预生成。首页可能先于预生成完成打开，
+ * 因此定时重新读取真实接口，自动补进陆续 ready 的问题。
+ */
+async function loadHot(): Promise<void> {
+  if (hotRequestInFlight || disposed) return
+  hotRequestInFlight = true
+  try {
+    const res = await getHot({ signal: hotAbort.signal })
+    if (disposed) return
+    items.value = (res?.items ?? []).slice(0, 24)
+    hotFailed.value = false
+  } catch (error) {
+    if (disposed) return
+    // A 404 means no ready snapshot yet; the server continues generating it.
+    hotFailed.value = !(error instanceof ApiError && error.status === 404)
+  } finally {
+    hotRequestInFlight = false
+    hotLoading.value = false
+    if (!disposed) {
+      hotRetryTimer = setTimeout(() => { void loadHot() }, items.value.length === 0 ? 15_000 : 30_000)
+    }
+  }
+}
 
 /** 配置缺失或网络失败时的提示气泡 */
 const loginHint = ref(false)
@@ -79,17 +115,17 @@ onMounted(async () => {
   if (oauth === 'success') tasks.push(user.reloadAfterOauth())
   else tasks.push(user.ensureLoaded())
 
-  tasks.push(
-    getHot()
-      .then((res) => { items.value = (res?.items ?? []).slice(0, 24) })
-      .catch(() => { hotFailed.value = true }),
-  )
+  tasks.push(loadHot())
   await Promise.all(tasks)
 })
 
 onBeforeUnmount(() => {
+  disposed = true
+  hotAbort.abort()
   if (hintTimer) clearTimeout(hintTimer)
   hintTimer = undefined
+  if (hotRetryTimer) clearTimeout(hotRetryTimer)
+  hotRetryTimer = undefined
 })
 </script>
 
@@ -115,9 +151,9 @@ onBeforeUnmount(() => {
 
     <div class="home__veil">
       <VeilGlass :height="600">
-        <HotGrid :items="items" :marks="marks" />
+        <HotGrid :items="items" :marks="marks" :empty-message="hotEmptyMessage" />
       </VeilGlass>
-      <p v-if="hotFailed" class="home__hot-error">热榜暂时取不到，请稍后再试</p>
+      <p v-if="hotFailed && items.length > 0" class="home__hot-error">热榜更新暂时中断，正在自动重试…</p>
     </div>
 
     <div class="home__foot">

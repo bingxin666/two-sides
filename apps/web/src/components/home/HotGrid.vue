@@ -12,9 +12,10 @@ import { useRouter } from 'vue-router'
 import type { HotItem } from '@two-sides/contract'
 import HotCard from './HotCard.vue'
 
-const props = withDefaults(defineProps<{ items?: HotItem[]; marks?: Record<string, string> }>(), {
+const props = withDefaults(defineProps<{ items?: HotItem[]; marks?: Record<string, string>; emptyMessage?: string }>(), {
   items: () => [],
   marks: () => ({}),
+  emptyMessage: '今日热榜尚未生成，稍后再来',
 })
 
 const router = useRouter()
@@ -124,7 +125,7 @@ onBeforeUnmount(() => {
         </div>
       </div>
     </template>
-    <p v-else class="hot-grid__empty">今日热榜尚未生成，稍后再来</p>
+    <p v-else class="hot-grid__empty" role="status">{{ emptyMessage }}</p>
   </div>
 </template>
 

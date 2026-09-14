@@ -34,9 +34,9 @@ if (API_MODE !== 'live' && API_MODE !== 'mock') {
 export const IS_MOCK = API_MODE === 'mock'
 
 /** 当日热榜（只含已 ready 的预置题）——产品唯一入口 */
-export async function getHot(): Promise<HotRespT> {
+export async function getHot(options?: RequestOptions): Promise<HotRespT> {
   if (IS_MOCK) return mockApi.getHot()
-  const { data } = await request(ENDPOINTS.hot, HotResp)
+  const { data } = await request(ENDPOINTS.hot, HotResp, options)
   return data
 }
 
