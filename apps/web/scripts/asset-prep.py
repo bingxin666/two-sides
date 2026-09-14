@@ -8,9 +8,12 @@ from pathlib import Path
 
 from PIL import Image, ImageFilter, ImageSequence
 
-SRC = Path(r"E:\two-sides\assets\liukanshan")
-OUT = Path(r"E:\two-sides\apps\web\src\assets\liukanshan")
-TMP = Path(r"E:\two-sides\apps\web\scripts\tmp")
+# Resolve paths from the repository location so the public script contains no
+# developer-specific absolute paths and works from any checkout directory.
+ROOT = Path(__file__).resolve().parents[3]
+SRC = ROOT / "assets" / "liukanshan"
+OUT = ROOT / "apps" / "web" / "src" / "assets" / "liukanshan"
+TMP = ROOT / "apps" / "web" / "scripts" / "tmp"
 
 OUT.mkdir(parents=True, exist_ok=True)
 
