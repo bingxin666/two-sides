@@ -22,6 +22,8 @@ import { resolve } from 'node:path'
 const RefSchema = z.object({
   provider: z.string().min(1),
   model: z.string().min(1),
+  /** Model-specific request setting; only configure for providers supporting it. */
+  thinking: z.enum(['enabled', 'disabled']).optional(),
 })
 
 const AgentSchema = RefSchema.extend({
@@ -74,11 +76,7 @@ interface Provider {
   models: string[]
 }
 
-interface Agent {
-  provider: string
-  model: string
-  fallback?: { provider: string; model: string }
-}
+type Agent = z.infer<typeof AgentSchema>
 
 interface Registry {
   providers: Map<string, Provider>
@@ -115,6 +113,7 @@ export interface ResolvedTarget {
   baseUrl: string
   apiKey: string
   model: string
+  thinking?: 'enabled' | 'disabled'
   path: 'primary' | 'fallback'
 }
 
@@ -122,14 +121,14 @@ const REQUIRED_AGENTS: AgentName[] = ['extract', 'expand', 'merge', 'orient', 'r
 
 function resolveRef(
   reg: Registry,
-  ref: { provider: string; model: string },
+  ref: z.infer<typeof RefSchema>,
   path: 'primary' | 'fallback',
 ): ResolvedTarget | null {
   const p = reg.providers.get(ref.provider)
   if (!p) return null
   const apiKey = process.env[p.apiKeyEnv]
   if (!apiKey) return null
-  return { provider: p.name, baseUrl: p.baseUrl, apiKey, model: ref.model, path }
+  return { provider: p.name, baseUrl: p.baseUrl, apiKey, model: ref.model, thinking: ref.thinking, path }
 }
 
 export function resolveAgent(
@@ -247,6 +246,7 @@ export async function callAgent<T = string>(
         temperature: opts.temperature,
         maxTokens: opts.maxTokens,
         reasoningEffort: opts.reasoningEffort ?? env.LLM_REASONING_EFFORT,
+        thinking: target.thinking,
         timeoutMs: opts.timeoutMs,
         deadlineAt,
         maxAttempts: pathAttempts,

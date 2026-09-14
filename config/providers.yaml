@@ -42,6 +42,8 @@ agents:
   merge:
     provider: origami
     model: deepseek-v4-flash
+    # 真实请求验证：reasoning_effort=low 仍可能耗尽输出预算，使用该模型独立的开关。
+    thinking: disabled
     fallback: { provider: deepseek, model: deepseek-reasoner }
   orient:
     provider: origami
@@ -67,4 +69,5 @@ agents:
   summary:
     provider: origami
     model: deepseek-v4-flash
+    thinking: disabled
     fallback: { provider: deepseek, model: deepseek-chat }

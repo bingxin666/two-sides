@@ -27,7 +27,7 @@ writeFileSync(configPath, JSON.stringify({
     orient: { provider: 'primary', model: 'test', fallback: { provider: 'primary', model: 'test' } },
     summary: { provider: 'primary', model: 'test', fallback: { provider: 'backup', model: 'test' } },
     expand: { provider: 'primary', model: 'test', fallback: { provider: 'backup', model: 'test' } },
-    merge: { provider: 'primary', model: 'test', fallback: { provider: 'backup', model: 'test' } },
+    merge: { provider: 'primary', model: 'test', thinking: 'disabled', fallback: { provider: 'backup', model: 'test' } },
     rescue: { provider: 'primary', model: 'test', fallback: { provider: 'backup', model: 'test' } },
     summaryFallback: { provider: 'primary', model: 'test', fallback: { provider: 'backup', model: 'test' } },
   },
@@ -158,11 +158,39 @@ try {
   await check('provider sends configured low reasoning effort', async () => {
     fetcher = async (_url, init) => {
       assert.equal(JSON.parse(String(init?.body)).reasoning_effort, 'low')
+      assert.equal(JSON.parse(String(init?.body)).thinking, undefined)
       return response('ok', 5)
     }
     const result = await callAgent('extract', { messages: base.messages, deadlineAt: Date.now() + 500,
       context: { qid: 'reasoning', date: '2026-09-13', stage: 'extract', unit: 'reasoning-test' } })
     assert.equal(result.content, 'ok')
+  })
+  await check('model-specific thinking is applied only to its configured provider path', async () => {
+    fetcher = async (url, init) => {
+      const body = JSON.parse(String(init?.body))
+      if (url.includes('primary')) {
+        assert.deepEqual(body.thinking, { type: 'disabled' })
+        return new Response('', { status: 503 })
+      }
+      assert.equal(body.thinking, undefined)
+      return response('ok')
+    }
+    const result = await callAgent('merge', { messages: base.messages, maxAttempts: 2, deadlineAt: Date.now() + 1500 })
+    assert.equal(result.content, 'ok')
+    assert.equal(result.attempts, 2)
+  })
+  await check('token-truncated responses retry even when partial content is valid JSON', async () => {
+    let validations = 0
+    fetcher = async () => requests.length === 1
+      ? Response.json({ choices: [{ finish_reason: 'length', message: { content: '{"topics":[]}' } }],
+        usage: { prompt_tokens: 5, completion_tokens: 10, total_tokens: 15 } })
+      : response('{"topics":["complete"]}', 5)
+    const result = await chat({ ...base, maxTokens: 10, maxAttempts: 2, deadlineAt: Date.now() + 2000,
+      validate: (raw) => { validations++; return JSON.parse(raw) } })
+    assert.equal(result.attempts, 2)
+    assert.equal(result.usage?.totalTokens, 20)
+    assert.equal(validations, 1)
+    assert.deepEqual(result.content, { topics: ['complete'] })
   })
   await check('shared three attempts include two primary calls and one fallback', async () => {
     const tokenStart = llmCounters.tokens
@@ -262,7 +290,7 @@ try {
     assert.equal(entry.nested.values[0].tokens, '[redacted]')
     assert(!captured.join('\n').includes(credential))
     assert(!captured.join('\n').includes('sensitive-raw-content'))
-    const httpLog = captured.map((line) => JSON.parse(line)).find((line) => line.msg === 'llm.call.fail' && line.kind === 'http')
+    const httpLog = captured.map((line) => JSON.parse(line)).find((line) => line.msg === 'llm.call.fail' && line.kind === 'http' && line.agent === 'orient')
     assert.equal(httpLog.status, 400)
     const callLog = captured.map((line) => JSON.parse(line)).find((line) => line.msg === 'llm.call.ok' && line.qid === '42' && line.attempts === 3)
     assert.equal(callLog.qid, '42')

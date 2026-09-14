@@ -25,6 +25,8 @@ export interface ChatRequest {
   maxTokens?: number
   /** OpenAI-compatible reasoning effort for reasoning models. */
   reasoningEffort?: 'low' | 'medium' | 'high' | 'xhigh'
+  /** Supported by DeepSeek; independent from OpenAI reasoning_effort. */
+  thinking?: 'enabled' | 'disabled'
   /** Per-attempt limit; deadlineAt is the shared total limit. */
   timeoutMs?: number
   deadlineAt?: number
@@ -133,7 +135,7 @@ async function backoff(attempt: number, deadlineAt: number, signal?: AbortSignal
 }
 
 interface ChoicePayload {
-  choices?: Array<{ message?: { content?: unknown }; text?: unknown }>
+  choices?: Array<{ message?: { content?: unknown }; text?: unknown; finish_reason?: string }>
   usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number }
 }
 
@@ -196,6 +198,7 @@ export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>>
         if (typeof req.temperature === 'number') body.temperature = req.temperature
         if (typeof req.maxTokens === 'number') body.max_tokens = req.maxTokens
         if (req.reasoningEffort) body.reasoning_effort = req.reasoningEffort
+        if (req.thinking) body.thinking = { type: req.thinking }
         const encodedBody = JSON.stringify(body)
         const res = await abortable(() => {
           assertCallActive(req.signal, attemptDeadlineAt)
@@ -226,6 +229,10 @@ export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>>
         usage = addUsage(usage, billed)
         if (billed) llmCounters.tokens += billed.totalTokens
         assertCallActive(req.signal, attemptDeadlineAt)
+        if (payload.choices?.[0]?.finish_reason === 'length') {
+          log.warn('llm.output.truncated', { ...req.context, model: req.model, maxTokens: req.maxTokens })
+          throw new LlmError('llm output exceeded token limit', 'parse')
+        }
         const raw = extractContent(payload)
         if (raw === null) throw new LlmError('llm response has no content', 'parse')
         let content: unknown = raw

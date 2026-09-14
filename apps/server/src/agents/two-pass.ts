@@ -138,7 +138,7 @@ async function callPass<T>(
       maxAttempts: 2,
       // Topic discovery now reads a much larger pool; classification keeps a
       // larger budget for one answer's placements and reasons.
-      maxTokens: agent === 'merge' ? 6_000 : 3_000,
+      maxTokens: agent === 'merge' ? 12_000 : 3_000,
       context: { qid: ctx.qid, date: ctx.date, stage, unit: ctx.unit ?? (agent === 'merge' ? 'topics' : undefined) },
       validate,
     })
