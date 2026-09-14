@@ -10,7 +10,7 @@ import { Hono } from 'hono'
 import type { Context } from 'hono'
 import { getCookie, setCookie } from 'hono/cookie'
 import { env } from '../env'
-import { errFields, log } from '../log'
+import { log } from '../log'
 import { failResp, okData } from '../http'
 import { forgetSignals } from '../user-signals'
 
@@ -18,6 +18,7 @@ const SESSION_COOKIE = 'two_sides_zhihu_session'
 const STATE_COOKIE = 'two_sides_zhihu_state'
 const SESSION_TTL_SEC = 60 * 60
 const STATE_TTL_MS = 10 * 60 * 1000
+const TOKEN_EXCHANGE_TIMEOUT_MS = 15_000
 
 type Session = { accessToken: string; expiresAt: number }
 
@@ -64,27 +65,31 @@ function callbackRedirect(c: Context, ok: boolean): Response {
 }
 
 export async function handleZhihuCallback(c: Context): Promise<Response> {
+  // OAuth codes must not be cached or sent as referrers after leaving this URL.
+  c.header('Cache-Control', 'no-store')
+  c.header('Referrer-Policy', 'no-referrer')
   prune()
   const url = new URL(c.req.url)
   const error = url.searchParams.get('error')
+  const returnedState = url.searchParams.get('state')
+  const cookieState = getCookie(c, STATE_COOKIE)
+  const createdAt = returnedState ? pendingStates.get(returnedState) : undefined
+  if (!returnedState || createdAt === undefined ||
+      createdAt + STATE_TTL_MS <= Date.now() || cookieState !== returnedState) {
+    return callbackRedirect(c, false)
+  }
+  // Consume only after validating the browser binding; a mismatched request
+  // must not invalidate another browser's in-progress login.
+  pendingStates.delete(returnedState)
+  setCookie(c, STATE_COOKIE, '', { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 0 })
+
+  // Provider denials still need a valid state binding before we redirect.
   if (error) return callbackRedirect(c, false)
 
-  const returnedState = url.searchParams.get('state')
-  if (returnedState) {
-    const createdAt = pendingStates.get(returnedState)
-    pendingStates.delete(returnedState)
-    const cookieState = getCookie(c, STATE_COOKIE)
-    if (!createdAt || createdAt + STATE_TTL_MS <= Date.now() || cookieState !== returnedState) {
-      return failResp(c, 400, 'OAuth state 无效或已过期')
-    }
-    setCookie(c, STATE_COOKIE, '', { httpOnly: true, secure: true, sameSite: 'Lax', path: '/', maxAge: 0 })
-  }
-
   const code = url.searchParams.get('authorization_code') || url.searchParams.get('code')
-  if (!code) return failResp(c, 400, '回调缺少 authorization_code')
-  if (!configured()) return failResp(c, 503, 'OAuth 尚未配置')
+  if (!code || !configured()) return callbackRedirect(c, false)
 
-  let response: Response
+  let payload: unknown
   try {
     const body = new URLSearchParams({
       app_id: env.ZHIHU_OAUTH_APP_ID,
@@ -93,29 +98,28 @@ export async function handleZhihuCallback(c: Context): Promise<Response> {
       redirect_uri: env.ZHIHU_OAUTH_REDIRECT_URI,
       code,
     })
-    response = await fetch('https://openapi.zhihu.com/access_token', {
+    const response = await fetch('https://openapi.zhihu.com/access_token', {
       method: 'POST',
       headers: { 'content-type': 'application/x-www-form-urlencoded' },
       body,
+      signal: AbortSignal.timeout(TOKEN_EXCHANGE_TIMEOUT_MS),
     })
-  } catch (cause) {
-    log.warn('oauth.token_exchange_failed', errFields(cause))
-    return failResp(c, 502, '知乎 OAuth 暂时不可用')
-  }
-
-  let payload: unknown
-  try {
+    if (!response.ok) {
+      log.warn('oauth.token_exchange_rejected', { status: response.status })
+      return callbackRedirect(c, false)
+    }
     payload = await response.json()
-  } catch (cause) {
-    log.warn('oauth.token_response_invalid', { status: response.status, ...errFields(cause) })
-    return failResp(c, 502, '知乎 OAuth 返回无效响应')
+  } catch {
+    // Upstream error messages/bodies can contain credentials; log no raw data.
+    log.warn('oauth.token_exchange_failed')
+    return callbackRedirect(c, false)
   }
 
   const record = payload && typeof payload === 'object' ? payload as Record<string, unknown> : {}
   const accessToken = typeof record.access_token === 'string' ? record.access_token : ''
   if (!accessToken) {
-    log.warn('oauth.token_exchange_rejected', { status: response.status })
-    return failResp(c, 502, '知乎 OAuth 授权失败')
+    log.warn('oauth.token_response_invalid')
+    return callbackRedirect(c, false)
   }
 
   const expiresIn = typeof record.expires_in === 'number' && Number.isFinite(record.expires_in)
@@ -152,6 +156,8 @@ authRoutes.get('/auth/zhihu/status', (c) => {
 })
 
 authRoutes.get('/auth/zhihu/authorize', (c) => {
+  c.header('Cache-Control', 'no-store')
+  prune()
   if (!configured()) return failResp(c, 503, 'OAuth 尚未配置')
   const state = randomOpaque()
   pendingStates.set(state, Date.now())

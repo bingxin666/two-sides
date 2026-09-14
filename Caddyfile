@@ -1,9 +1,9 @@
 # 两面 · Caddy 站点配置
-# 由 docker-compose.yml 挂载到 /etc/caddy/Caddyfile（只读）
+# 手动部署参考；Docker 镜像实际打包 apps/web/Caddyfile。
 #
 # 职责二选一，不做别的：
 #   1. 静态托管 Vue 构建产物（root * /srv）
-#   2. /api/* 反代到 server:3000
+#   2. /api/* 和 /callback 反代到 server:3000
 #
 # 不签证书、不占 443：对外 HTTPS 由宿主侧反代终止后转发到 127.0.0.1:8080
 
@@ -28,8 +28,5 @@
 		file_server
 	}
 
-	log {
-		output stdout
-		format console
-	}
+	# 不记录访问 URL，避免 OAuth 回调的 code/state 进入日志。
 }

@@ -62,7 +62,7 @@ async function loadHot(): Promise<void> {
 }
 
 /** 配置缺失或网络失败时的提示气泡 */
-const loginHint = ref(false)
+const loginHint = ref('')
 let hintTimer: ReturnType<typeof setTimeout> | undefined
 
 /** qid → 标记文案（响应式：user.marks 变化即重算） */
@@ -77,9 +77,9 @@ const marks = computed<Record<string, string>>(() => {
 })
 
 function showHint(text = '当前为离线预览，OAuth 登录需使用 live 后端') {
-  loginHint.value = true
+  loginHint.value = text
   if (hintTimer) clearTimeout(hintTimer)
-  hintTimer = setTimeout(() => { loginHint.value = false; hintTimer = undefined }, 2600)
+  hintTimer = setTimeout(() => { loginHint.value = ''; hintTimer = undefined }, 6000)
 }
 
 function onLogin() {
@@ -105,7 +105,7 @@ onMounted(async () => {
   // OAuth 回跳：后端已种下会话 cookie，这里强制重拉标记并把 oauth 参数从地址栏摘掉
   const oauth = route.query.oauth
   if (oauth === 'success' || oauth === 'error') {
-    if (oauth === 'error') showHint('知乎授权未完成，可重试')
+    if (oauth === 'error') showHint('知乎授权未完成或已过期，请重新点击「知乎授权登录」')
     const query = { ...route.query }
     delete query.oauth
     void router.replace({ path: route.path, query })

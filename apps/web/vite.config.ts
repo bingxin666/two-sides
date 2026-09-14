@@ -19,9 +19,13 @@ export default defineConfig({
   server: {
     port: 5173,
     host: '127.0.0.1',
-    // 真实联调（VITE_API_MODE=live）时把 /api 反代到 Bun 服务
+    // API 与公开 OAuth 回调都由 Bun 服务处理，与生产代理保持一致。
     proxy: {
       '/api': {
+        target: 'http://127.0.0.1:3000',
+        changeOrigin: true,
+      },
+      '/callback': {
         target: 'http://127.0.0.1:3000',
         changeOrigin: true,
       },

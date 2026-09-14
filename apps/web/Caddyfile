@@ -6,6 +6,11 @@
 		reverse_proxy server:3000
 	}
 
+	# Zhihu returns to this public URL, outside the /api prefix.
+	handle /callback {
+		reverse_proxy server:3000
+	}
+
 	handle {
 		try_files {path} /index.html
 		file_server

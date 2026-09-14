@@ -42,6 +42,9 @@ jobs:
       - name: Build application artifacts
         run: pnpm build
 
+      - name: Verify packaged web Caddy routing
+        run: bash scripts/test-web-routing.sh
+
       - name: Log in to GHCR
         uses: docker/login-action@v3
         with:
