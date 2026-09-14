@@ -980,7 +980,7 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
       }
 
       // provider 层承载（providers.yaml 的 summary agent，primary origami）。
-      // 失败不重试（protect 预算），异常上抛由 pipeline 统一降级（summaryDegradation 可观测）。
+      // 瞬时失败自动重试，所有尝试共享现有 12 秒预算，避免无限重试拖住管线。
       const r = await callAgent('summary', {
         messages: [
           { role: 'system', content: LIUKANSHAN_SYSTEM },
@@ -990,9 +990,13 @@ export function createLlmAgents(opts: LlmAgentsOptions = {}): PipelineAgents {
         signal: ctx.signal,
         timeoutMs: 12_000,
         deadlineAt: Math.min(ctx.deadlineAt ?? Infinity, Date.now() + 12_000),
-        maxAttempts: 1,
+        maxAttempts: 3,
         maxTokens: 1_200,
         context: { qid: ctx.qid, date: ctx.date, stage: 'summary' },
+        validate: (raw) => {
+          if (!raw.trim()) throw new Error('summary is empty')
+          return raw
+        },
       })
       ctx.note('summary.liukanshan.ok', { tokens: r.usage?.totalTokens ?? 0 })
       return { summary: truncate(r.content, SUMMARY_MAX_LEN), source: 'liukanshan' }

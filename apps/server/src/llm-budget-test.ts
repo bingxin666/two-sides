@@ -184,7 +184,7 @@ try {
     assert.equal(err.stats.attempts, 1)
     assert.equal(err.status, 400)
   })
-  await check('maxAttempts one forbids summary retries or fallback', async () => {
+  await check('an explicit maxAttempts one forbids retries or fallback', async () => {
     fetcher = async () => { throw new Error(`Authorization: Bearer ${credential}`) }
     const err = await expectError(() => callAgent('summary', { messages: base.messages, maxAttempts: 1 }), 'network')
     assert.equal(requests.length, 1)
@@ -219,16 +219,26 @@ try {
       signal: controller.signal }), ['原始问题是什么？'])
     assert.equal(requests.length, 1)
   })
-  await check('summarize sends max_tokens 1200 and does not retry HTTP errors', async () => {
+  await check('summarize sends max_tokens 1200 and retries a transient HTTP error', async () => {
     fetcher = async (_url, init) => {
       assert.equal(JSON.parse(String(init?.body)).max_tokens, 1200)
-      return new Response(credential, { status: 503 })
+      return requests.length === 1 ? new Response(credential, { status: 503 }) : response('已恢复的综述')
     }
     const ctx = { qid: '42', date: '2026-09-13', signal: new AbortController().signal,
-      deadlineAt: Date.now() + 1000, report() {}, note() {} }
-    const err = await expectError(() => createLlmAgents().summarize([], [], ctx), 'http')
-    assert.equal(requests.length, 1)
-    assert.equal(err.stats.attempts, 1)
+      deadlineAt: Date.now() + 2500, report() {}, note() {} }
+    const result = await createLlmAgents().summarize([], [], ctx)
+    assert.equal(result.summary, '已恢复的综述')
+    assert.equal(result.source, 'liukanshan')
+    assert.equal(requests.length, 2)
+    assert(requests.every((url) => new URL(url).hostname === 'primary.invalid'))
+  })
+  await check('summarize retries an empty response instead of accepting missing content', async () => {
+    fetcher = async () => response(requests.length === 1 ? '  ' : '有效综述')
+    const ctx = { qid: '42', date: '2026-09-13', signal: new AbortController().signal,
+      deadlineAt: Date.now() + 2500, report() {}, note() {} }
+    const result = await createLlmAgents().summarize([], [], ctx)
+    assert.equal(result.summary, '有效综述')
+    assert.equal(requests.length, 2)
   })
   await check('summarize slow body respects the pipeline context deadline', async () => {
     fetcher = async () => ({ ok: true, json: () => new Promise(() => {}) }) as unknown as Response
@@ -252,6 +262,8 @@ try {
     assert.equal(entry.nested.values[0].tokens, '[redacted]')
     assert(!captured.join('\n').includes(credential))
     assert(!captured.join('\n').includes('sensitive-raw-content'))
+    const httpLog = captured.map((line) => JSON.parse(line)).find((line) => line.msg === 'llm.call.fail' && line.kind === 'http')
+    assert.equal(httpLog.status, 400)
     const callLog = captured.map((line) => JSON.parse(line)).find((line) => line.msg === 'llm.call.ok' && line.qid === '42' && line.attempts === 3)
     assert.equal(callLog.qid, '42')
     assert.equal(callLog.attempts, 3)

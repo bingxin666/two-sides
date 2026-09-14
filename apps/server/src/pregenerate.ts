@@ -45,7 +45,7 @@ export interface PregenerateReport {
   started: number
   /** INSERT 竞争失败（他处 worker 持有，不抢） */
   busyElsewhere: number
-  /** failed 终态题（不自动重跑） */
+  /** failed 题尚在退避窗口内，或不可重试 */
   skippedFailed: number
   /** started 中最终 failed 的题数（单题失败不阻塞批次的直接证据） */
   endedFailed: number
@@ -85,7 +85,8 @@ export async function runPregenerateBatch(
         continue
       }
       // 与 GET/POST 主端点同一条 INSERT 竞争路径：抢到才跑
-      const acq = tryAcquire(date, item.qid)
+      const retryAt = failedRetryAt(date, item.qid)
+      const acq = tryAcquire(date, item.qid, { allowFailedRetry: retryAt !== null && retryAt <= Date.now() })
       if (!acq.owned || !acq.job) {
         if (getAnalysis(date, item.qid)?.status === 'failed') report.skippedFailed++
         else report.busyElsewhere++
@@ -149,6 +150,70 @@ async function generateForDate(date: string, topN: number, reuseStored: boolean)
 /** 启动、cron 和本进程手动调用共用批次；异常后释放，后续调用仍可重试。 */
 const activeBatches = new Map<string, Promise<PregenerateReport>>()
 
+/** Persisted attempts and failure time retain backoff across process restarts. */
+export function retryDelayMs(attempts: number): number {
+  const base = Math.max(1_000, env.RETRY_COOLDOWN_SEC * 1000)
+  return Math.min(30 * 60_000, base * 2 ** Math.min(20, Math.max(0, attempts - 1)))
+}
+
+function failedRetryAt(date: string, qid: string): number | null {
+  const analysis = getAnalysis(date, qid)
+  const job = getJob(date, qid)
+  if (analysis?.status !== 'failed' || job?.status !== 'failed' || job.retryable !== 1) return null
+  const updated = parseIso(analysis.updated_at)
+  return (Number.isFinite(updated) ? updated : Date.now()) + retryDelayMs(analysis.attempts)
+}
+
+const retryTimers = new Map<string, ReturnType<typeof setTimeout>>()
+const emptyListAttempts = new Map<string, number>()
+
+/** One background timer per day; ready and nonretryable failures are never rerun. */
+function scheduleRetry(date: string, topN: number): void {
+  for (const [day, timer] of retryTimers) {
+    if (day !== date) { clearTimeout(timer); retryTimers.delete(day); emptyListAttempts.delete(day) }
+  }
+  const previous = retryTimers.get(date)
+  if (previous) clearTimeout(previous)
+  retryTimers.delete(date)
+  // Automatic recovery is a production concern; deterministic fake-mode tests and
+  // local demos keep their explicit one-shot semantics.
+  if (todayKey() !== date || !isLive() || env.PIPELINE_MODE !== 'llm' || topN <= 0) return
+  const items = listHotQuestions(date).slice(0, topN)
+  let delay = Infinity
+  if (items.length === 0) {
+    const attempts = (emptyListAttempts.get(date) ?? 0) + 1
+    emptyListAttempts.set(date, attempts)
+    delay = retryDelayMs(attempts)
+  } else {
+    emptyListAttempts.delete(date)
+    for (const item of items) {
+      const analysis = getAnalysis(date, item.qid)
+      if (analysis?.status === 'ready') continue
+      if (analysis?.status === 'failed') {
+        const retryAt = failedRetryAt(date, item.qid)
+        if (retryAt !== null) delay = Math.min(delay, Math.max(1000, retryAt - Date.now()))
+        continue
+      }
+      const job = getJob(date, item.qid)
+      const updated = job ? parseIso(job.updated_at) : NaN
+      const retryAt = Number.isFinite(updated)
+        ? updated + env.JOB_TIMEOUT_SEC * 1000 + STALE_GRACE_MS + 1
+        : Date.now() + retryDelayMs(1)
+      delay = Math.min(delay, Math.max(1000, retryAt - Date.now()))
+    }
+  }
+  if (!Number.isFinite(delay)) return
+  log.info('pregenerate.retry.scheduled', { date, delayMs: delay })
+  const timer = setTimeout(() => {
+    retryTimers.delete(date)
+    if (todayKey() !== date || !isLive()) return
+    void pregenerate(topN, { reuseStored: true })
+      .catch((e) => log.warn('pregenerate.retry.failed', { date, ...errFields(e) }))
+  }, delay)
+  timer.unref()
+  retryTimers.set(date, timer)
+}
+
 export function pregenerate(
   topN: number = env.PREGENERATE_TOP,
   options: { reuseStored?: boolean } = {},
@@ -157,15 +222,15 @@ export function pregenerate(
   const active = activeBatches.get(date)
   if (active) return active
   const batch = generateForDate(date, topN, options.reuseStored ?? false)
-    .finally(() => { activeBatches.delete(date) })
+    .finally(() => {
+      activeBatches.delete(date)
+      scheduleRetry(date, topN)
+    })
   activeBatches.set(date, batch)
   return batch
 }
 
-/**
- * 刚重启时旧进程的 generating 锁还可能未过期。只在其到期后复查一次，
- * 仍走 tryAcquire，其他进程仍在更新的任务不抢占；failed 不自动重跑。
- */
+/** Recheck interrupted pending/generating jobs once their stale grace expires. */
 function recheckInterruptedOnce(date: string): void {
   let delay = 0
   for (const item of listHotQuestions(date).slice(0, env.PREGENERATE_TOP)) {
@@ -180,12 +245,10 @@ function recheckInterruptedOnce(date: string): void {
   if (!delay) return
   log.info('pregenerate.boot.recheckScheduled', { date, delayMs: delay })
   setTimeout(() => {
-    // 不递归重试，也不因热榜抓取失败发起新的请求。
     void Promise.resolve().then(() => {
       if (todayKey() !== date || !isLive()) return
       return runPregenerateBatch(date, listHotQuestions(date).slice(0, env.PREGENERATE_TOP))
-    })
-      .catch((e) => log.warn('pregenerate.boot.recheckFailed', { date, ...errFields(e) }))
+    }).catch((e) => log.warn('pregenerate.boot.recheckFailed', { date, ...errFields(e) }))
   }, delay).unref()
 }
 

@@ -260,7 +260,7 @@ export async function chat<T = string>(req: ChatRequest): Promise<ChatResult<T>>
   } catch (e) {
     const error = e instanceof LlmError ? e : new LlmError('llm request failed', 'network')
     const cumulative = stats()
-    log.warn('llm.exhausted', { ...req.context, model: req.model, kind: error.kind, ...cumulative,
+    log.warn('llm.exhausted', { ...req.context, model: req.model, kind: error.kind, status: error.status, ...cumulative,
       tokens: cumulative.usage?.totalTokens ?? 0 })
     throw new LlmError(error.message, error.kind, error.status, cumulative)
   }

@@ -3,9 +3,9 @@
  *
  * 状态图：
  *   pending → generating → ready | failed
- *   failed  → pending   仅由 POST 触发且过冷却（ANALYSIS_RETRY_COOLDOWN_SEC）
+ *   failed  → pending   POST 冷却后重试，或热榜预生成按退避自动重试
  *   ready   → pending   仅 POST ?force=1
- *   failed 不自动重试（防额度黑洞）；次日 cron 用新日期键自然重建
+ *   热榜的 retryable 失败由 pregenerate 调度；GET 不触发重试
  *
  * 并发归属（§6.3）：谁成功 INSERT jobs 谁才有权启动 runner。
  * UNIQUE(date, qid) 即锁 —— INSERT OR IGNORE 返回 changes===0 表示已有 worker 持有，
@@ -73,7 +73,7 @@ export interface AcquireResult {
 
 export interface AcquireOptions {
   /**
-   * 是否允许接管 failed（仅 POST 重试路径，且调用方已确认过冷却）。
+   * 是否允许接管 failed（POST / 预生成重试路径，调用方已确认过冷却）。
    * 默认 false —— failed 是终态，GET 路径永不接管（§6.1）。
    */
   allowFailedRetry?: boolean
@@ -87,7 +87,7 @@ export function tryAcquire(date: string, qid: string, opts: AcquireOptions = {})
   const k = jobKey(date, qid)
   const analysis = getAnalysis(date, qid)
 
-  // failed 是终态：GET 路径永远不接管，只能由 POST 显式重试（§6.1）
+  // GET 不接管 failed；重试调度器 / POST 必须显式授权并检查冷却。
   if (analysis?.status === 'failed' && !opts.allowFailedRetry) {
     return { owned: false, job: getJob(date, qid) }
   }
@@ -100,7 +100,7 @@ export function tryAcquire(date: string, qid: string, opts: AcquireOptions = {})
     const stale =
       !Number.isFinite(age) || age < 0 || age > env.JOB_TIMEOUT_SEC * 1000 + STALE_GRACE_MS
     // 本进程没在跑 + （从未启动过 / 已僵死）→ 释放旧锁，重新参与同一套竞争
-    if (!aliveHere && (existing.status === 'pending' || stale)) {
+    if (!aliveHere && (existing.status === 'pending' || stale || (existing.status === 'failed' && opts.allowFailedRetry))) {
       log.warn('job.stale.takeover', { qid, date, jobId: existing.id, ageMs: Math.round(age) })
       deleteJob(date, qid)
     } else {

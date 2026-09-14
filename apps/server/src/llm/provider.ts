@@ -279,6 +279,7 @@ export async function callAgent<T = string>(
         model: target.model,
         path,
         kind,
+        status: lastErr.status,
         ...stats(),
         tokens: usage?.totalTokens ?? 0,
       })
